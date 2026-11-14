@@ -1,0 +1,70 @@
+---
+import Page from '../layouts/Page.astro';
+---
+<Page title="Machine Learning Lab" description="Test a trained climate model against unseen NASA observations, then explore your own inputs.">
+<p class="eyebrow">TRAINED ON NASA POWER · RIDGE REGRESSION · HELD-OUT TESTING</p>
+<label>Trained model<select id="ml-model"></select></label>
+<button id="ml-export">Download model and test results</button> <a href="/reports/Ferris_Eight_Features.pdf" download>Download illustrated feature report (PDF)</a>
+<div id="ml-metrics" class="grid"></div>
+<div id="ml-chart" class="chart" aria-label="Held-out observations compared with model predictions"></div>
+<article>
+<h2>Try a held-out month</h2>
+<p>Choose a test month to load its historical inputs. Change a value to run the fitted model in your browser.</p>
+<label>Test month<select id="ml-month"></select></label>
+<div id="ml-inputs" class="grid"></div>
+<button id="ml-run">Run prediction</button> <button id="ml-reset">Restore historical inputs</button>
+<div id="ml-result" role="status" aria-live="polite"></div>
+</article>
+<details><summary>Training design and model card</summary>
+<p>Six ridge regression models learn temperature or rainfall from four historical measurements and two cyclic month features. Hyperparameters are selected using 2002-2016 training and 2017-2020 validation. The selected model is refitted on 2002-2020 only. Standardization is fitted separately within each training stage. The untouched 2021-2025 period is used for one-step evaluation with observed historical inputs, not recursive multi-month forecasting.</p>
+<p>Ridge minimizes squared error plus alpha times the squared coefficient norm. Both previous-month persistence and same-month-last-year baselines are reported. Lower RMSE is better. Poor model performance remains visible rather than being hidden.</p>
+<p>NASA POWER provides gridded meteorological estimates, not ground measurements for an entire region. Input changes are sensitivity experiments, not causal interventions. Predictions have no calibrated uncertainty interval. Rainfall is unconstrained and can be negative; such outputs are flagged rather than silently clipped. All inference runs locally in your browser.</p>
+<pre id="ml-card"></pre><a href="https://power.larc.nasa.gov/docs/services/api/temporal/monthly/">NASA POWER source documentation</a>
+</details>
+</Page>
+<script>
+import * as echarts from 'echarts';
+const get=(id:string)=>document.getElementById(id)!;
+const select=(id:string)=>get(id) as HTMLSelectElement;
+try {
+ const response=await fetch('/ml-models.json'); if(!response.ok) throw new Error('Model file unavailable');
+ const models=await response.json(); let model:any;
+ const chart=echarts.init(get('ml-chart'));
+ select('ml-model').innerHTML=models.map((m:any,i:number)=>'<option value="'+i+'">'+m.location+' · '+m.target+'</option>').join('');
+ function loadMonth(){
+  const sample=model.test[Number(select('ml-month').value)];
+  get('ml-inputs').innerHTML=model.features.slice(0,4).map((name:string,i:number)=>'<label>'+name+'<input id="ml-x'+i+'" type="number" step="any" value="'+sample.inputs[i]+'" required /></label>').join('');
+  run();
+ }
+ function run(){
+  const sample=model.test[Number(select('ml-month').value)];
+  const inputs=sample.inputs.slice();
+  for(let i=0;i<4;i++){
+   const field=get('ml-x'+i) as HTMLInputElement;
+   if(!field.value.trim()||!Number.isFinite(field.valueAsNumber)){get('ml-result').textContent='Enter a finite number in every input.';return;}
+   inputs[i]=field.valueAsNumber;
+  }
+  if(inputs[1]<0||inputs[3]<0){get('ml-result').textContent='Observed rainfall inputs must be nonnegative.';return;}
+  const prediction=model.intercept+inputs.reduce((sum:number,x:number,i:number)=>sum+(x-model.mean[i])/model.scale[i]*model.weights[i],0);
+  const edited=inputs.some((x:number,i:number)=>x!==sample.inputs[i]);
+  const outside=inputs.some((x:number,i:number)=>x<model.minimum[i]||x>model.maximum[i]);
+  get('ml-result').textContent='Prediction: '+prediction.toFixed(3)+' '+model.unit+'. '+(edited?'Custom-input sensitivity experiment. The historical observation is not a ground-truth target for edited inputs.':'Observed: '+sample.actual.toFixed(3)+' '+model.unit+' · absolute error: '+Math.abs(prediction-sample.actual).toFixed(3)+'.')+(outside?' Warning: input outside the training range.':'')+(model.target==='Rainfall'&&prediction<0?' Warning: physically invalid negative rainfall prediction.':'');
+ }
+ function render(){
+  model=models[Number(select('ml-model').value)];
+  select('ml-month').innerHTML=model.test.map((s:any,i:number)=>'<option value="'+i+'">'+s.date+'</option>').join('');
+  get('ml-metrics').innerHTML=[['Model test RMSE',model.metrics.rmse],['Seasonal baseline RMSE',model.seasonal.rmse],['Persistence baseline RMSE',model.persistence.rmse],['Model test MAE',model.metrics.mae]].map(([label,value])=>'<article><small>'+label+'</small><h2>'+Number(value).toFixed(3)+' '+model.unit+'</h2></article>').join('');
+  chart.setOption({tooltip:{trigger:'axis'},legend:{bottom:0,textStyle:{color:'#d5e8f5'}},grid:{left:65,right:25,bottom:65},xAxis:{type:'category',data:model.test.map((s:any)=>s.date)},yAxis:{type:'value',scale:true,name:model.unit},series:[{name:'Observed',type:'line',showSymbol:false,data:model.test.map((s:any)=>s.actual),itemStyle:{color:'#9ce9d1'}},{name:'ML prediction',type:'line',showSymbol:false,data:model.test.map((s:any)=>s.predicted),itemStyle:{color:'#8ac7ff'}},{name:'Seasonal baseline',type:'line',showSymbol:false,data:model.test.map((s:any)=>s.seasonal),lineStyle:{type:'dashed',opacity:.6},itemStyle:{color:'#b9a4ed'}}]},true);
+  get('ml-card').textContent=JSON.stringify({algorithm:'Standardized ridge regression',training:model.training_period,training_samples:model.training_count,validation:model.validation_period,test:model.test_period,test_samples:model.test_count,selected_alpha:model.alpha,validation_candidates:model.candidates,features:model.features,standardized_coefficients:model.weights},null,2);
+  loadMonth();
+ }
+ select('ml-model').onchange=render;select('ml-month').onchange=loadMonth;
+ get('ml-run').onclick=run;get('ml-reset').onclick=loadMonth;
+ get('ml-export').onclick=()=>{const url=URL.createObjectURL(new Blob([JSON.stringify(model,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='ferris-'+model.id+'-model.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
+ new ResizeObserver(()=>chart.resize()).observe(get('ml-chart'));render();
+} catch(error){get('ml-result').textContent='The trained models could not load. Refresh the page to try again.';console.error(error);}
+</script>
+<style>
+.eyebrow{font-size:11px;letter-spacing:1.8px;color:#9ce9ee}#ml-result{margin-top:22px;padding:18px;border-left:3px solid #91e4ec;background:#0b192c}#ml-chart{background:#0b192c;border:1px solid #30425d;border-radius:12px;margin:20px 0}.grid article{margin:0}.grid h2{font-size:22px}
+</style>
+
