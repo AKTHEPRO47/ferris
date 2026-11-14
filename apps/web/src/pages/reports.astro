@@ -1,0 +1,46 @@
+---
+import Page from '../layouts/Page.astro';
+---
+<Page title="From evidence to research." description="Compose a thesis-style research draft from a reproducible NASA investigation.">
+<div class="report-controls">
+<label>Investigation<select id="investigation"></select></label>
+<label>Report title<input id="report-title" value="Regional climate trends and statistical evidence"/></label>
+<label>Research question<input id="question" value="How has the selected climate variable changed over 2001–2025?"/></label>
+<label>Author<input id="author" placeholder="Your name"/></label>
+<button id="print">Print or save PDF</button><button id="markdown">Download Markdown</button>
+<p>Results populate from the selected dataset. Add your literature review and independent validation before using this draft for academic submission.</p>
+</div>
+<article class="report-paper" id="paper"><small>FERRIS · RESEARCH DRAFT</small><h1 id="heading"></h1><p id="byline"></p><div id="report"></div></article>
+<script>
+const missions=await fetch('/missions.json').then(r=>r.json());
+const get=(id:string)=>document.getElementById(id)!;
+const value=(id:string)=>(get(id) as HTMLInputElement).value;
+get('investigation').innerHTML=missions.map((m:any,i:number)=>'<option value="'+i+'">'+m.location+' · '+m.label+'</option>').join('');
+const requestedMission = new URLSearchParams(window.location.search).get('mission');
+const requestedIndex = missions.findIndex((mission:any)=>mission.id===requestedMission);
+if(requestedIndex>=0)(get('investigation') as HTMLSelectElement).value=String(requestedIndex);
+let sections:{title:string,text:string}[]=[];
+function render(){
+ const m=missions[Number(value('investigation'))];
+ const slope=(m.slope*10).toFixed(4);
+ sections=[
+ {title:'Abstract',text:'This study estimates changes in '+m.label.toLowerCase()+' for the NASA POWER grid location associated with '+m.location+' over 2001–2025. Twenty-five complete annual observations yield an estimated slope of '+slope+' '+m.unit+' per decade. The approximate HAC p-value is '+m.hac_p.toPrecision(4)+'. The analysis is descriptive and conditional on the source product, selected window and regression assumptions.'},
+ {title:'Research question',text:value('question')},
+ {title:'Data and study area',text:'Source: '+m.source+'. Requested location: '+m.coordinates[1]+'° latitude, '+m.coordinates[0]+'° longitude. The analysis uses monthly '+m.variable+' values, with source units '+m.monthly_unit+'. The study uses a gridded point series, which does not represent a field measurement or an area average over the entire named region.'},
+ {title:'Methodology',text:'Annual precipitation sums monthly mean daily rates multiplied by calendar days. Annual temperature is calendar-day weighted. Only years containing all twelve valid months enter the annual analysis. OLS estimates the linear trend. HAC covariance uses Bartlett weights, three annual lags and a finite-sample correction, with approximate Student t inference. Theil–Sen provides a robust slope comparison. Seasonal anomalies subtract the calendar-month means over the full study period.'},
+ {title:'Results',text:'OLS slope: '+slope+' '+m.unit+' per decade. Approximate 95% HAC interval: '+m.hac_interval.map((x:number)=>(x*10).toFixed(4)).join(' to ')+'. Approximate HAC p-value: '+m.hac_p.toPrecision(4)+'. Theil–Sen slope per decade: '+(m.theil_sen*10).toFixed(4)+'. OLS R-squared: '+m.r2.toFixed(4)+'. Lag-one residual correlation: '+m.lag1.toFixed(4)+'.'},
+ {title:'Discussion',text:'The estimated trend '+(m.hac_p<.05?'meets':'does not meet')+' the selected 0.05 significance threshold under the approximate inference model. Practical importance requires domain-specific interpretation of the magnitude. Potential explanations should be evaluated with additional variables and independently validated observations. The available result alone does not establish a causal mechanism.'},
+ {title:'Limitations and validation needs',text:'The short annual record limits diagnostic power. HAC results depend on lag selection and are approximate. Endpoint sensitivity, alternative seasonal definitions, product uncertainty, spatial multiple testing and independent replication require further examination. True-color satellite browse images provide contextual evidence and cannot establish a quantitative vegetation change. No literature review or causal attribution has been performed in this generated draft.'},
+ {title:'Reproducibility',text:'Source responses are stored in data/raw. science/fetch_power.py retrieves the NASA monthly records and science/prepare_missions.py regenerates the prepared investigations. Evidence exports include the source metadata, monthly series, annual observations, fitted values and residuals. Record the code revision and retrieval timestamp for a final research release.'},
+ {title:'References',text:'NASA POWER. Monthly API documentation. https://power.larc.nasa.gov/docs/services/api/temporal/monthly/\nNASA GIBS. Access basics. https://nasa-gibs.github.io/gibs-api-docs/access-basics/'}
+ ];
+ get('heading').textContent=value('report-title');get('byline').textContent=(value('author')||'Author to be added')+' · '+m.location+' · '+m.label;
+ get('report').replaceChildren();
+ for(const section of sections){const heading=document.createElement('h2');heading.textContent=section.title;const paragraph=document.createElement('p');paragraph.textContent=section.text;get('report').append(heading,paragraph);}
+}
+['investigation','report-title','question','author'].forEach(id=>get(id).addEventListener('input',render));
+get('print').onclick=()=>window.print();
+get('markdown').onclick=()=>{const content='# '+value('report-title')+'\n\n'+get('byline').textContent+'\n\n'+sections.map(s=>'## '+s.title+'\n\n'+s.text).join('\n\n');const url=URL.createObjectURL(new Blob([content],{type:'text/markdown'}));const link=document.createElement('a');link.href=url;link.download='ferris-research-draft.md';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000)};
+render();
+</script>
+</Page>

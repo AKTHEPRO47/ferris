@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.astro/
+__pycache__/
+.env
+.venv/
+tmp/
+output/
+.wrangler/
+.env.*
+!.env.example
+*.log

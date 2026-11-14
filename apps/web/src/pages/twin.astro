@@ -1,0 +1,54 @@
+---
+import Page from '../layouts/Page.astro';
+---
+<Page title="Earth Digital Twin Lite" description="Explore conditional trajectories from a two-variable probabilistic regional model.">
+<label>Region<select id="region"></select></label><label>Temperature input each month <input id="temperature" type="range" min="-2" max="2" step=".1" value="0"/><output id="temperature-label"></output></label><label>Rainfall input relative to monthly climatology <input id="rain" type="range" min="-50" max="50" step="5" value="0"/><output id="rain-label"></output></label>
+<label>Measurement<select id="measurement"><option value="0">Temperature</option><option value="1">Rainfall</option></select></label><button id="reset">Reset inputs</button><button id="export">Export scenario</button>
+<p id="warning" role="status"></p><div id="twin-chart" class="chart"></div>
+<article><h2>Model interpretation</h2><p id="interpretation"></p><p>The scenario begins after December 2025. Sliders impose repeated monthly inputs in the modeled anomaly state. Outputs are conditional model trajectories. The covariance accounts for process and assumed observation noise, with fixed fitted parameters.</p></article>
+<div id="validation" class="grid"></div>
+<details><summary>Model equations, assumptions and provenance</summary><p>x(t+1) = A x(t) + u(t) + process noise. y(t) = x(t) + observation noise. H = I. The two states represent standardized temperature and precipitation anomalies. Transition coefficients and climatology use 2001–2020 only. Validation uses sequential one-step predictions during 2021–2025, updating with each observed month after prediction. Scenario forecasts start from the final filtered state.</p><pre id="model"></pre><p>These states have meteorological meanings. Vegetation, soil moisture, evapotranspiration and runoff are absent from this model. Hydrological balance constraints require those additional measurements. The observation-noise assumption and Gaussian rainfall approximation require further validation.</p></details>
+</Page>
+<script>
+import * as echarts from 'echarts';
+const models=await fetch('/twins.json').then(r=>r.json());
+const get=(id:string)=>document.getElementById(id)!;
+const value=(id:string)=>(get(id) as HTMLInputElement).value;
+get('region').innerHTML=models.map((m:any,i:number)=>'<option value="'+i+'">'+m.location+'</option>').join('');
+const chart=echarts.init(get('twin-chart'));
+let result:any;
+const multiply=(matrix:number[][],vector:number[])=>matrix.map(row=>row.reduce((sum,x,i)=>sum+x*vector[i],0));
+function covarianceStep(a:number[][],p:number[][],q:number[][]){
+ return [0,1].map(i=>[0,1].map(j=>q[i][j]+[0,1].reduce((sum,k)=>sum+[0,1].reduce((total,l)=>total+a[i][k]*p[k][l]*a[j][l],0),0)));
+}
+function forecast(model:any,temperature:number,rain:number){
+ let state=[...model.state];let covariance=model.covariance.map((row:number[])=>[...row]);
+ const trajectory=[];
+ for(let month=0;month<24;month++){
+  const seasonal=model.climatology[month%12];
+  state=multiply(model.transition,state).map((v,i)=>v+(i===0?temperature/model.scale[0]:seasonal[1]*rain/100/model.scale[1]));
+  covariance=covarianceStep(model.transition,covariance,model.process);
+  const mean=state.map((v,i)=>v*model.scale[i]+seasonal[i]);
+  const sd=[0,1].map(i=>Math.sqrt(covariance[i][i]+model.noise[i][i])*model.scale[i]);
+  trajectory.push({date:String(2026+Math.floor(month/12))+'-'+String(month%12+1).padStart(2,'0'),mean,lower:mean.map((v,i)=>v-1.96*sd[i]),upper:mean.map((v,i)=>v+1.96*sd[i]),outside:state.some((v,i)=>v<model.training_min[i]||v>model.training_max[i])});
+ }
+ return trajectory;
+}
+function render(){
+ const model=models[Number(value('region'))],dimension=Number(value('measurement'));
+ const temperature=Number(value('temperature')),rain=Number(value('rain'));
+ get('temperature-label').textContent=temperature.toFixed(1)+' °C';
+ get('rain-label').textContent=rain+'%';
+ const baseline=forecast(model,0,0),scenario=forecast(model,temperature,rain);
+ result={location:model.location,inputs:{temperature,rain},model,scenario,baseline};
+ get('warning').textContent=scenario.some((p:any)=>p.outside)?'Extrapolation alert · a modeled state exceeds the training anomaly range.':'Modeled states remain within the training anomaly ranges.';
+ chart.setOption({tooltip:{trigger:'axis'},legend:{bottom:0,textStyle:{color:'#d8e8df'}},grid:{left:65,right:25,bottom:65},xAxis:{type:'category',data:scenario.map(p=>p.date)},yAxis:{type:'value',scale:true,name:model.units[dimension]},series:[{name:'Baseline',type:'line',data:baseline.map(p=>p.mean[dimension]),showSymbol:false,lineStyle:{type:'dashed',color:'#9db4c6'}},{name:'Scenario mean',type:'line',data:scenario.map(p=>p.mean[dimension]),showSymbol:false,itemStyle:{color:'#8adab7'}},{name:'95% lower predictive bound',type:'line',data:scenario.map(p=>p.lower[dimension]),showSymbol:false,lineStyle:{width:1,color:'#688e80'}},{name:'95% upper predictive bound',type:'line',data:scenario.map(p=>p.upper[dimension]),showSymbol:false,lineStyle:{width:1,color:'#688e80'}}]},true);
+ get('interpretation').textContent='For '+model.location+', the final scenario mean differs from baseline by '+(scenario[23].mean[dimension]-baseline[23].mean[dimension]).toFixed(3)+' '+model.units[dimension]+'. Input sensitivities are imposed modeling assumptions. Negative rainfall predictions or bounds expose limitations of the Gaussian approximation.';
+ get('validation').innerHTML=['Temperature','Rainfall'].map((name,i)=>'<article><h2>'+name+' validation</h2><p>2021–2025 one-step RMSE '+model.validation.rmse[i].toFixed(3)+' '+model.units[i]+'</p><p>Persistence RMSE '+model.validation.persistence_rmse[i].toFixed(3)+' · climatology RMSE '+model.validation.climatology_rmse[i].toFixed(3)+'</p><p>Empirical 95% interval coverage '+(model.validation.coverage[i]*100).toFixed(1)+'%</p></article>').join('');
+ get('model').textContent=JSON.stringify({training:model.training_period,source:model.source,A:model.transition,Q:model.process,R:model.noise,assumptions:model.assumptions},null,2);
+}
+['region','measurement','temperature','rain'].forEach(id=>get(id).oninput=render);
+get('reset').onclick=()=>{(get('temperature') as HTMLInputElement).value='0';(get('rain') as HTMLInputElement).value='0';render()};
+get('export').onclick=()=>{const url=URL.createObjectURL(new Blob([JSON.stringify(result,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='ferris-conditional-scenario.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)};
+new ResizeObserver(()=>chart.resize()).observe(get('twin-chart'));render();
+</script>

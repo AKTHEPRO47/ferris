@@ -1,0 +1,100 @@
+---
+import Page from '../layouts/Page.astro';
+---
+<Page title="Your next discovery starts here." description="Follow a scientific investigation from a question to a traceable result.">
+<div class="workspace">
+<section>
+<ol class="steps" aria-label="Investigation progress"><li>Choose a question</li><li>Choose a location</li><li>Review the evidence</li><li>Interpret and save</li></ol>
+<progress id="progress" max="4" value="1" aria-label="Investigation progress"></progress>
+<div id="stage0" class="stage card">
+<h2>What do you want to understand?</h2><p>Choose a measurement, then write the question you want the evidence to answer.</p>
+<div class="choices"><button class="choice" data-variable="T2M" aria-pressed="true">Is this place getting warmer?<small>Annual mean temperature · °C</small></button><button class="choice" data-variable="PRECTOTCORR" aria-pressed="false">Is rainfall changing?<small>Annual precipitation · mm/year</small></button></div>
+<label class="wide">Your research question<textarea id="question" rows="3">How has annual mean temperature changed between 2001 and 2025?</textarea></label>
+</div>
+<div id="stage1" class="stage card" hidden><h2>Where should we investigate?</h2><label>Prepared NASA location<select id="location"><option>Borneo</option><option>Sumatra</option><option>Singapore</option></select></label><div id="coverage"></div><p>Each mission uses a gridded NASA POWER point series at the displayed coordinates. The study window is 2001–2025.</p><label class="check"><input id="understood" type="checkbox"/> I understand that this grid location represents a local estimate.</label></div>
+<div id="stage2" class="stage card" hidden><h2>Read the evidence</h2><label>Evidence view<select id="view"><option value="values">Annual observations and fit</option><option value="anomalies">Monthly seasonal anomalies</option><option value="residuals">Regression residuals</option></select></label><div id="guided-chart" class="chart"></div><div id="metrics" class="metrics"></div><details><summary>How were these values calculated?</summary><p>Annual temperature uses calendar-day weights. Annual precipitation sums monthly daily rates multiplied by calendar days. OLS fits the annual trend. Approximate HAC inference uses three lags and a finite-sample correction.</p></details></div>
+<div id="stage3" class="stage card" hidden><h2>What can you conclude?</h2><p id="conclusion"></p><label class="wide">Your interpretation<textarea id="notes" rows="4" placeholder="Describe the evidence, uncertainty, and a follow-up question."></textarea></label><div class="actions"><button id="save">Save investigation</button><a id="report" href="/reports">Create research report ↗</a><a href="/satellite">Inspect satellite imagery ↗</a></div><p id="saved-status" role="status"></p></div>
+<div class="actions"><button id="back">Back</button><span id="step-label"></span><button id="next">Continue</button></div>
+<section class="card"><h2>Your investigation notebook</h2><p>Saved in this browser. Export a record to keep a separate copy.</p><div id="notebook"></div></section>
+</section>
+<aside class="card assistant">
+<small>FERRIS RESEARCH ASSISTANT</small><h2>Ask the evidence.</h2><p>Answers use the selected NASA record and documented methods. This version uses a local rule-based assistant.</p>
+<div class="prompts"><button data-prompt="Explain my result">Explain my result</button><button data-prompt="What does the p-value mean?">Explain significance</button><button data-prompt="What are the limitations?">Check limitations</button><button data-prompt="What should I investigate next?">Suggest next step</button></div>
+<div id="chat" role="log" aria-live="polite" aria-label="Research conversation"></div>
+<form id="chat-form"><label class="wide">Ask about this investigation<input id="message" autocomplete="off" placeholder="Ask about trends, uncertainty, sources…"/></label><button type="submit">Ask Ferris</button></form>
+<a href="https://power.larc.nasa.gov/docs/services/api/temporal/monthly/" target="_blank" rel="noreferrer">NASA POWER source documentation ↗</a>
+</aside>
+</div>
+</Page>
+<script>
+import * as echarts from 'echarts';
+type Mission={id:string;location:string;variable:string;label:string;unit:string;coordinates:number[];years:number[];values:number[];fitted:number[];monthly_dates:string[];anomalies:number[];residuals:number[];monthly_unit:string;slope:number;hac_p:number;hac_interval:number[];n:number;lag1:number;source:string};
+const get=(id:string)=>document.getElementById(id)!;
+const field=(id:string)=>(get(id) as HTMLInputElement).value;
+const missions:Mission[]=await fetch('/missions.json').then(response=>{if(!response.ok)throw new Error('Evidence unavailable');return response.json()});
+let variable='T2M',step=0;
+let chart:echarts.ECharts|undefined;
+const selected=()=>missions.find(m=>m.location===field('location')&&m.variable===variable)!;
+function updateContext(){
+ const m=selected();
+ get('coverage').textContent=m.source+' · '+m.n+' complete annual observations · '+m.coordinates[1]+'° latitude, '+m.coordinates[0]+'° longitude';
+ get('conclusion').textContent=m.label+' has an estimated '+(m.slope>0?'increase':'decrease')+' of '+Math.abs(m.slope*10).toFixed(3)+' '+m.unit+' per decade. Its approximate HAC p-value '+m.hac_p.toPrecision(3)+' '+(m.hac_p<.05?'meets':'does not meet')+' the 0.05 threshold. Causal explanations require additional evidence.';
+ (get('report') as HTMLAnchorElement).href='/reports?mission='+encodeURIComponent(m.id);
+ if(step===2)renderChart();
+}
+function renderChart(){
+ const m=selected();const mode=field('view') as 'values'|'anomalies'|'residuals';
+ chart??=echarts.init(get('guided-chart'));
+ const series:any[]=[{name:m.location,type:'line',data:m[mode],showSymbol:false,itemStyle:{color:'#83dbb4'}}];
+ if(mode==='values')series.push({name:'OLS fit',type:'line',data:m.fitted,showSymbol:false,lineStyle:{type:'dashed',color:'#e8b373'}});
+ chart.resize();chart.setOption({tooltip:{trigger:'axis'},legend:{bottom:0,textStyle:{color:'#cee5dc'}},grid:{left:65,right:20,bottom:60},xAxis:{type:'category',data:mode==='anomalies'?m.monthly_dates:m.years},yAxis:{type:'value',scale:true,name:mode==='anomalies'?m.monthly_unit:m.unit},series},true);
+ get('metrics').innerHTML=[['Slope per decade',(m.slope*10).toFixed(3)],['Approximate HAC p',m.hac_p.toPrecision(3)],['95% HAC interval per decade',m.hac_interval.map(v=>(v*10).toFixed(3)).join(' to ')]].map(([label,value])=>'<div>'+label+'<strong>'+value+'</strong></div>').join('');
+}
+function renderStep(){
+ document.querySelectorAll<HTMLElement>('.stage').forEach((element,index)=>element.hidden=index!==step);
+ document.querySelectorAll('.steps li').forEach((element,index)=>{element.setAttribute('aria-current',index===step?'step':'false');element.classList.toggle('complete',index<step)});
+ (get('progress') as HTMLProgressElement).value=step+1;
+ (get('back') as HTMLButtonElement).disabled=step===0;
+ (get('next') as HTMLButtonElement).disabled=step===3;
+ get('step-label').textContent='Step '+(step+1)+' of 4';
+ updateContext();
+}
+get('next').onclick=()=>{if(step===1&&!(get('understood') as HTMLInputElement).checked){(get('understood') as HTMLInputElement).focus();get('coverage').textContent+=' Please confirm the geographic interpretation to continue.';return}step=Math.min(3,step+1);renderStep()};
+get('back').onclick=()=>{step=Math.max(0,step-1);renderStep()};
+document.querySelectorAll<HTMLButtonElement>('[data-variable]').forEach(button=>button.onclick=()=>{variable=button.dataset.variable!;document.querySelectorAll<HTMLButtonElement>('[data-variable]').forEach(b=>b.setAttribute('aria-pressed',String(b===button)));(get('question') as HTMLTextAreaElement).value=variable==='T2M'?'How has annual mean temperature changed between 2001 and 2025?':'How has annual rainfall changed between 2001 and 2025?';updateContext()});
+get('location').onchange=()=>{(get('understood') as HTMLInputElement).checked=false;updateContext()};
+get('view').onchange=renderChart;
+new ResizeObserver(()=>chart?.resize()).observe(get('guided-chart'));
+function reply(question:string){
+ const m=selected();const q=question.toLowerCase();
+ let answer:string;
+ if(/p-value|significan|uncertain|confidence/.test(q))answer='The approximate HAC p-value is '+m.hac_p.toPrecision(4)+'. The 95% slope interval per decade is '+m.hac_interval.map(v=>(v*10).toFixed(4)).join(' to ')+' '+m.unit+'. This inference uses three annual lags and model assumptions. A p-value measures compatibility with a zero-slope model; it does not assign a probability to that hypothesis.';
+ else if(/limit|quality|reliab|trust/.test(q))answer='This mission has '+m.n+' complete annual observations. The short record limits diagnostics. HAC inference is approximate. Endpoint sensitivity, source-product uncertainty and spatial multiple-testing adjustments require further work. The named region refers to the displayed grid location.';
+ else if(/source|data|nasa|provenance/.test(q))answer='This investigation uses '+m.source+' monthly '+m.variable+' estimates for '+m.coordinates[1]+'°, '+m.coordinates[0]+'°, covering 2001–2025. Source responses and metadata are retained in the data catalog. The satellite explorer uses a separate NASA GIBS MODIS product.';
+ else if(/next|why|cause|hypothesis/.test(q))answer='A useful follow-up is to compare '+(m.variable==='T2M'?'precipitation seasonality and land-cover observations':'vegetation indices and rainfall anomalies')+' over shared dates and geographic coverage. Test plausible response lags and competing explanations. This is a suggested investigation, not an established cause.';
+ else if(/trend|result|slope|explain|warm|rain/.test(q))answer=m.label+' in '+m.location+' has an estimated slope of '+(m.slope*10).toFixed(4)+' '+m.unit+' per decade. The approximate HAC p-value is '+m.hac_p.toPrecision(4)+'. This '+(m.hac_p<.05?'meets':'does not meet')+' the selected 0.05 threshold under the fitted model.';
+ else answer='I can explain the selected trend, significance, uncertainty, NASA source, limitations, or a next investigation. Try “Explain my result” or “What are the limitations?”';
+ for(const [role,text] of [['You',question],['Ferris · '+m.location+' · '+m.label,answer]]){const entry=document.createElement('div');entry.className='message';const title=document.createElement('strong');title.textContent=role;const paragraph=document.createElement('p');paragraph.textContent=text;entry.append(title,paragraph);get('chat').append(entry)}
+ get('chat').scrollTop=get('chat').scrollHeight;
+}
+document.querySelectorAll<HTMLButtonElement>('[data-prompt]').forEach(button=>button.onclick=()=>reply(button.dataset.prompt!));
+get('chat-form').onsubmit=event=>{event.preventDefault();const text=field('message').trim();if(text){reply(text);(get('message') as HTMLInputElement).value=''}};
+type Saved={id:string;missionId:string;question:string;notes:string;created:string};
+function readSaved():Saved[]{try{const entries=JSON.parse(localStorage.getItem('ferris-notebook')||'[]');return Array.isArray(entries)?entries.filter(e=>e&&typeof e.id==='string'&&typeof e.missionId==='string'&&typeof e.question==='string'&&typeof e.notes==='string'):[]}catch{return []}}
+function notebook(){
+ get('notebook').replaceChildren();const saved=readSaved();
+ if(!saved.length)get('notebook').textContent='Your saved investigations will appear here.';
+ for(const record of saved){
+ const row=document.createElement('article');const title=document.createElement('h3');title.textContent=record.question;
+ const notes=document.createElement('p');notes.textContent=record.notes||'No interpretation recorded.';
+ const open=document.createElement('button');open.textContent='Resume';open.onclick=()=>{const mission=missions.find(m=>m.id===record.missionId);if(!mission)return;variable=mission.variable;(get('location') as HTMLSelectElement).value=mission.location;(get('question') as HTMLTextAreaElement).value=record.question;(get('notes') as HTMLTextAreaElement).value=record.notes;document.querySelectorAll<HTMLButtonElement>('[data-variable]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.variable===variable)));step=3;renderStep();get('stage3').scrollIntoView({block:'start'})};
+ const download=document.createElement('button');download.textContent='Export';download.onclick=()=>{const url=URL.createObjectURL(new Blob([JSON.stringify({...record,evidence:missions.find(m=>m.id===record.missionId)},null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='ferris-notebook.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)};
+ row.append(title,notes,open,download);get('notebook').append(row);
+ }
+}
+get('save').onclick=()=>{try{const entries=readSaved();entries.unshift({id:crypto.randomUUID(),missionId:selected().id,question:field('question'),notes:field('notes'),created:new Date().toISOString()});localStorage.setItem('ferris-notebook',JSON.stringify(entries));get('saved-status').textContent='Saved in this browser.';notebook()}catch{get('saved-status').textContent='Browser storage is unavailable. Use the research report to export your findings.'}};
+renderStep();notebook();
+</script>
+<style>
+.workspace{display:grid;grid-template-columns:minmax(0,1.8fr) minmax(290px,1fr);gap:25px}.assistant{position:sticky;top:110px;align-self:start}.steps{display:flex;gap:20px;padding:0;list-style:none;font-size:12px;color:#9ab6a9}.steps li[aria-current=step]{color:#d7f5e7;font-weight:700}.steps li.complete{color:#83d2b0}progress{width:100%;height:5px;accent-color:#b3e7ce}.choices{display:grid;grid-template-columns:1fr 1fr;gap:15px}.choice{padding:25px!important;text-align:left}.choice small{display:block;color:#244c3c!important;margin-top:10px}.choice[aria-pressed=true]{outline:3px solid #f2d6a5}.wide{display:flex;width:100%;margin:15px 0}textarea{background:#102a30;color:#dbeee4;border:1px solid #45665b;border-radius:9px;padding:15px;font:inherit;resize:vertical;width:100%}.actions{display:flex;align-items:center;gap:18px;flex-wrap:wrap}.check{display:flex;flex-direction:row;align-items:center}.prompts{display:flex;gap:8px;flex-wrap:wrap}.prompts button{font-size:12px;padding:8px 10px!important}#chat{max-height:420px;overflow:auto;margin:20px 0}.message{padding:12px 0;border-bottom:1px solid #39554d}.message strong{font-size:12px}.message p{font-size:14px}.metrics{display:grid;grid-template-columns:repeat(3,1fr)}button:disabled{opacity:.4;cursor:default}[hidden]{display:none!important}@media(max-width:1000px){.workspace{grid-template-columns:1fr}.assistant{position:static}.choices{grid-template-columns:1fr}}
+</style>

@@ -1,0 +1,36 @@
+---
+import Page from '../layouts/Page.astro';
+---
+<Page title="Compare regions" description="Inspect the same measurement across two NASA POWER locations.">
+<label>Measurement<select id="variable"><option value="T2M">Annual temperature</option><option value="PRECTOTCORR">Annual precipitation</option></select></label>
+<label>First region<select id="left"><option>Borneo</option><option>Sumatra</option><option>Singapore</option></select></label>
+<label>Second region<select id="right"><option>Singapore</option><option>Sumatra</option><option>Borneo</option></select></label>
+<label>Chart<select id="display"><option value="raw">Original units</option><option value="normalized">Standardized within each region</option></select></label>
+<div id="comparison" class="chart"></div><div id="summary" class="grid"></div>
+<p>Trend intervals describe each regional fit separately. Establishing a difference between slopes requires a joint statistical test. Standardization subtracts each series mean and divides by its sample standard deviation.</p>
+<button id="csv">Download aligned CSV</button>
+</Page>
+<script>
+import * as echarts from 'echarts';
+const data=await fetch('/missions.json').then(r=>r.json());
+const select=(id:string)=>(document.getElementById(id) as HTMLSelectElement).value;
+const chart=echarts.init(document.getElementById('comparison'));
+let pair:any[]=[];
+function update(){
+ pair=['left','right'].map(id=>data.find((m:any)=>m.location===select(id)&&m.variable===select('variable')));
+ const standardized=select('display')==='normalized';
+ const series=pair.map((m:any)=>{
+  const mean=m.values.reduce((a:number,b:number)=>a+b,0)/m.n;
+  const sd=Math.sqrt(m.values.reduce((a:number,b:number)=>a+(b-mean)**2,0)/(m.n-1));
+  return {name:m.location,type:'line',showSymbol:false,data:standardized?m.values.map((v:number)=>(v-mean)/sd):m.values};
+ });
+ chart.setOption({tooltip:{trigger:'axis'},legend:{textStyle:{color:'#d8e8df'}},grid:{left:70,right:20,bottom:60},xAxis:{type:'category',data:pair[0].years},yAxis:{type:'value',scale:true,name:standardized?'Standard deviations':pair[0].unit},series,color:['#63d2aa','#e6b16a']},true);
+ document.getElementById('summary')!.innerHTML=pair.map(m=>'<article><h2>'+m.location+'</h2><p>Slope per decade <b>'+(m.slope*10).toFixed(3)+' '+m.unit+'</b></p><p>95% HAC interval '+m.hac_interval.map((v:number)=>(v*10).toFixed(3)).join(' to ')+'</p><p>Approximate HAC p-value '+m.hac_p.toPrecision(3)+'</p></article>').join('');
+}
+['left','right','variable','display'].forEach(id=>document.getElementById(id)!.onchange=update);
+document.getElementById('csv')!.onclick=()=>{
+ const rows=['year,'+pair.map(m=>m.location+' ('+m.unit+')').join(',')].concat(pair[0].years.map((year:number,i:number)=>[year,pair[0].values[i],pair[1].values[i]].join(',')));
+ const url=URL.createObjectURL(new Blob([rows.join('\n')],{type:'text/csv'}));const link=document.createElement('a');link.href=url;link.download='ferris-regional-comparison.csv';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+};
+new ResizeObserver(()=>chart.resize()).observe(document.getElementById('comparison')!);update();
+</script>

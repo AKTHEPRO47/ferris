@@ -1,0 +1,46 @@
+---
+import Page from '../layouts/Page.astro';
+---
+<Page title="Climate Contradiction Atlas" description="Test whether comparable locations exhibit credible opposing trends.">
+<div class="actions"><a href="/earth">Explore on the 3D Earth ↗</a><a href="/twin">Explore scenarios ↗</a><a href="/mirage">Inspect vegetation divergence ↗</a></div>
+<article><h2 id="headline"></h2><p>Baseline similarity uses 2001–2005 temperature and rainfall. Trend tests use 2006–2025. This exploratory atlas contains three NASA POWER locations.</p></article>
+<label>Measurement<select id="variable"><option value="T2M">Temperature</option><option value="PRECTOTCORR">Precipitation</option></select></label>
+<label>Region pair<select id="pair"></select></label>
+<label><input id="qualified" type="checkbox"/> Show qualifying opposite pairs only</label>
+<p id="empty" role="status"></p>
+<div id="details"><div class="chart" id="atlas-chart"></div><div id="statistics" class="grid"></div><article><h2>Direct contrast and discovery ranking</h2><p id="contrast"></p><p id="ranking"></p><button id="export">Download pair evidence</button></article></div>
+<details><summary>Statistical design and ranking formula</summary><p id="families"></p><p id="score"></p><p id="matching"></p><p>The paired-difference series is analyzed directly, preserving contemporaneous shared variability between locations. Twenty annual observations limit HAC calibration. Matching on two baseline features does not establish causal equivalence. The ranking score is a descriptive heuristic.</p></details>
+</Page>
+<script>
+import * as echarts from 'echarts';
+const data=await fetch('/atlas.json').then(r=>r.json());
+const get=(id:string)=>document.getElementById(id)!;
+const value=(id:string)=>(get(id) as HTMLSelectElement).value;
+const chart=echarts.init(get('atlas-chart'));
+let active:any;
+get('headline').textContent=data.pairs.filter((p:any)=>p.qualified).length+' qualifying opposite-trend pairs';
+for(const name of ['families','score','matching'])get(name).textContent=data[name];
+function render(){
+ active=data.pairs.find((p:any)=>p.id===value('pair'));
+ get('details').hidden=!active;
+ get('empty').textContent=active?'':'No pairs meet this filter. The evidence can support this outcome.';
+ if(!active)return;
+ chart.resize();
+ chart.setOption({tooltip:{trigger:'axis'},legend:{textStyle:{color:'#dfebe7'}},xAxis:{type:'category',data:active.years},yAxis:{type:'value',scale:true,name:active.unit},series:active.values.map((values:number[],i:number)=>({name:i?active.b:active.a,type:'line',data:values,showSymbol:false})),color:['#89dcbc','#e8b56e']},true);
+ get('statistics').replaceChildren();
+ active.trends.forEach((trend:any,index:number)=>{
+ const article=document.createElement('article');const title=document.createElement('h2');title.textContent=index?active.b:active.a;
+ const text=document.createElement('p');text.textContent='Slope per decade '+(trend.slope*10).toFixed(3)+' '+active.unit+' · p '+trend.p.toPrecision(3)+' · BH q '+trend.q.toPrecision(3)+' · 95% HAC interval '+trend.interval.map((v:number)=>(v*10).toFixed(3)).join(' to ');
+ article.append(title,text);get('statistics').append(article);
+ });
+ get('contrast').textContent=active.a+' minus '+active.b+': slope difference per decade '+(active.contrast.slope*10).toFixed(3)+' '+active.unit+'. Approximate 95% HAC interval '+active.contrast.interval.map((v:number)=>(v*10).toFixed(3)).join(' to ')+'. BH-adjusted contrast q '+active.contrast.q.toPrecision(3)+'.';
+ get('ranking').textContent='Discovery score '+active.score.toFixed(2)+' / 100. Baseline similarity '+active.similarity.toFixed(3)+'. Opposing directions: '+(active.opposite?'yes':'no')+'. Full significance criteria: '+(active.qualified?'met':'not met')+'.';
+}
+function filter(){
+ const pairs=data.pairs.filter((p:any)=>p.variable===value('variable')&&(!(get('qualified') as HTMLInputElement).checked||p.qualified)).sort((a:any,b:any)=>b.score-a.score);
+ get('pair').replaceChildren(...pairs.map((p:any)=>{const o=document.createElement('option');o.value=p.id;o.textContent=p.a+' / '+p.b;return o}));render();
+}
+get('variable').onchange=filter;get('qualified').onchange=filter;get('pair').onchange=render;
+get('export').onclick=()=>{if(!active)return;const url=URL.createObjectURL(new Blob([JSON.stringify({pair:active,methods:data.families,score:data.score},null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='ferris-contrast.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)};
+new ResizeObserver(()=>chart.resize()).observe(get('atlas-chart'));filter();
+</script>

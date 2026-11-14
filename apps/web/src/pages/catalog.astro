@@ -1,0 +1,24 @@
+---
+import Page from '../layouts/Page.astro';
+---
+<Page title="Data catalog" description="Inspect the sources and coverage behind every prepared investigation.">
+<label>Filter investigations<input id="search" type="search" placeholder="Location or measurement"/></label><div id="catalog" class="grid"></div>
+</Page>
+<script>
+const missions=await fetch('/missions.json').then(r=>r.json());
+function render(){
+ const query=(document.getElementById('search') as HTMLInputElement).value.toLowerCase();
+ const filtered=missions.filter((m:any)=>(m.location+' '+m.label).toLowerCase().includes(query));
+ const container=document.getElementById('catalog')!;container.replaceChildren();
+ for(const mission of filtered){
+ const card=document.createElement('article');
+ const title=document.createElement('h2');title.textContent=mission.location+' · '+mission.label;card.append(title);
+ const description=document.createElement('p');description.textContent=mission.source+' · '+mission.n+' annual observations · '+mission.years[0]+'–'+mission.years.at(-1)+' · '+mission.unit;card.append(description);
+ const notes=document.createElement('p');notes.textContent=mission.caveat;card.append(notes);
+ const button=document.createElement('button');button.textContent='Download source and analysis';button.onclick=()=>{const url=URL.createObjectURL(new Blob([JSON.stringify(mission,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download=mission.id+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)};card.append(button);
+ const details=document.createElement('details');const summary=document.createElement('summary');summary.textContent='Inspect source metadata';const pre=document.createElement('pre');pre.textContent=JSON.stringify(mission.header,null,2);details.append(summary,pre);card.append(details);container.append(card);
+ }
+ if(!filtered.length)container.textContent='No investigations match this filter.';
+}
+document.getElementById('search')!.oninput=render;render();
+</script>

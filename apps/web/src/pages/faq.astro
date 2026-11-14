@@ -1,0 +1,27 @@
+---
+import Page from '../layouts/Page.astro';
+const questions=[
+['Data','Where do these observations come from?','The six climate investigations use NASA POWER monthly temperature and corrected precipitation at three requested locations. NASA POWER source metadata is saved with each investigation. These are gridded meteorological estimates.'],
+['Data','Why do I see 2001–2025?','The prepared demonstrations cover 25 complete calendar years. Downloaded monthly responses are stored locally so the results can be regenerated.'],
+['Statistics','What does the p-value mean?','The p-value measures how unusual the test statistic would be under a zero-slope hypothesis and the specified model. Ferris shows an approximate HAC p-value and a 0.05 threshold.'],
+['Statistics','What if a result misses the significance threshold?','The estimate and its interval still describe the available evidence. Missing the threshold means the test has insufficient evidence to establish a directional trend at that threshold.'],
+['Statistics','What does HAC change?','Heteroskedasticity and autocorrelation consistent covariance allows for unequal residual variance and limited temporal dependence. The implementation uses three annual lags and approximate inference with 25 observations.'],
+['Satellite','Why is my satellite image cloudy or blank?','MODIS scenes may contain cloud, smoke or missing coverage. Try nearby dates and inspect NASA Worldview. A successfully downloaded image can still have blank pixels.'],
+['Satellite','Does the swipe viewer measure vegetation change?','The viewer compares true-color browse imagery. Quantitative vegetation change requires calibrated spectral bands, aligned scenes, quality masks and a defined analysis method.'],
+['Reports','Can I use the research report as a thesis?','The report is a structured research draft generated from a selected investigation. Review the research question, assumptions and citations, and add literature review, validation and interpretation before academic submission.'],
+['Reports','How do I export a report?','Choose an investigation on Research reports, add your title and research question, then use Print or save PDF. Your browser provides the PDF destination. Markdown export provides an editable text version.'],
+['Product','Are the explanations powered by an AI model?','Current explanations and next-step suggestions use deterministic rules tied to computed results. A language-model service and learned satellite inference are future integrations.'],
+['Product','Can I reproduce the result?','Download the evidence JSON from the investigation or data catalog. It includes monthly values, annual aggregates, source metadata, regression residuals and statistical outputs. The local Python scripts regenerate the prepared results.']
+];
+---
+<Page title="Questions, answered." description="Understand the evidence, the methods, and what you can do with Ferris.">
+<div class="report-controls"><label>Search questions<input id="search" type="search" placeholder="Try uncertainty, imagery, export…"/></label><label>Topic<select id="topic"><option>All topics</option>{[...new Set(questions.map(q=>q[0]))].map(topic=><option>{topic}</option>)}</select></label><button id="expand">Expand answers</button></div><p id="count" aria-live="polite"></p>
+<div id="questions">{questions.map(([topic,question,answer])=><details data-topic={topic}><summary>{question}</summary><p>{answer}</p></details>)}</div>
+</Page>
+<script>
+const search=document.getElementById('search') as HTMLInputElement;
+const topic=document.getElementById('topic') as HTMLSelectElement;
+const answers=Array.from(document.querySelectorAll<HTMLDetailsElement>('#questions details'));
+function filter(){let count=0;for(const answer of answers){answer.hidden=!(answer.textContent!.toLowerCase().includes(search.value.toLowerCase())&&(topic.value==='All topics'||answer.dataset.topic===topic.value));if(!answer.hidden)count++}document.getElementById('count')!.textContent=count+' matching questions';}
+search.oninput=filter;topic.onchange=filter;document.getElementById('expand')!.onclick=()=>{const visible=answers.filter(a=>!a.hidden);const open=visible.some(a=>!a.open);visible.forEach(a=>a.open=open);document.getElementById('expand')!.textContent=open?'Collapse answers':'Expand answers'};filter();
+</script>

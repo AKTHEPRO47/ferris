@@ -1,0 +1,23 @@
+---
+import Page from '../layouts/Page.astro';
+---
+<Page title="Science guide" description="Understand the calculations and the evidence each result can support.">
+<div class="grid">
+<article><h2>Trend magnitude</h2><p>A linear trend estimates the average change per unit time over the chosen period. Ferris reports annual-series slopes per decade by multiplying the slope by ten. Endpoint choice and unusual years can affect the estimate.</p></article>
+<article><h2>Uncertainty and significance</h2><p>A confidence interval expresses uncertainty under model assumptions. Ferris reports approximate HAC intervals that account for residual dependence over three annual lags. Small samples and long-range dependence can weaken this approximation.</p></article>
+<article><h2>Seasonal anomalies</h2><p>For each month, subtract the 2001–2025 average for that calendar month. An unusually wet January is compared with other Januaries. Rainfall anomaly units here remain the source monthly mean daily rate.</p></article>
+<article><h2>Robust slope</h2><p>The Theil–Sen estimate is the median of pairwise slopes. Comparing it with OLS helps identify sensitivity to extreme observations. Agreement alone does not validate the uncertainty model.</p></article>
+<article><h2>Satellite evidence</h2><p>MODIS true-color images provide geographic context. Quantitative vegetation analysis requires calibrated reflectance, spectral band definitions, valid-pixel masks and aligned observations. NDVI = (NIR − Red) / (NIR + Red).</p></article>
+<article><h2>Regional comparison</h2><p>The comparison page aligns annual records for the same variable. Standardized mode compares variability relative to each series mean and standard deviation. A formal regional trend difference requires joint inference.</p></article>
+</div>
+<article><h2>Interpret a p-value</h2><label>Illustrative p-value<input id="pvalue" type="number" min="0" max="1" step=".001" value=".04"/></label><label>Significance threshold<select id="alpha"><option value=".05">0.05</option><option value=".01">0.01</option><option value=".1">0.10</option></select></label><p id="answer" aria-live="polite"></p><p>This educational calculator uses your entered value. It makes no claim about a NASA investigation.</p></article>
+<p><a href="https://power.larc.nasa.gov/docs/services/api/temporal/monthly/">NASA POWER data documentation</a> · <a href="https://nasa-gibs.github.io/gibs-api-docs/access-basics/">NASA GIBS imagery documentation</a></p>
+</Page>
+<script>
+function explain(){
+ const p=Number((document.getElementById('pvalue') as HTMLInputElement).value);
+ const alpha=Number((document.getElementById('alpha') as HTMLSelectElement).value);
+ document.getElementById('answer')!.textContent=Number.isFinite(p)&&p>=0&&p<=1?'The result '+(p<alpha?'meets':'does not meet')+' the selected significance threshold. Interpretation depends on the null hypothesis, test assumptions and any multiple-testing correction.':'Enter a p-value between zero and one.';
+}
+document.getElementById('pvalue')!.oninput=explain;document.getElementById('alpha')!.onchange=explain;explain();
+</script>

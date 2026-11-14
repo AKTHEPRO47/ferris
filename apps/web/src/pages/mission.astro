@@ -1,0 +1,36 @@
+---
+import Navigation from '../layouts/Navigation.astro';
+---
+<html lang="en"><head><meta charset="utf-8"/><title>Ferris Mission Control</title><meta name="viewport" content="width=device-width"/></head><body><Navigation/><main><h1>Ferris · Earth investigations</h1><p>NASA POWER climate records · 2001–2025</p><label>Investigation <select id="mission"></select></label><label> Chart <select id="mode"><option value="values">Annual observations</option><option value="anomalies">Monthly seasonal anomalies</option><option value="residuals">Regression residuals</option></select></label><button id="export">Export evidence</button><div id="chart"></div><section id="results"></section><h2>Inspect satellite imagery</h2><p>NASA GIBS MODIS Terra true-color imagery. Clouds and missing coverage may obscure the landscape. These browse images provide geographic context for the climate record.</p><label>First date <input id="first" type="date" value="2020-08-15"/></label><label>Second date <input id="second" type="date" value="2024-08-15"/></label><div class="images"><img id="a" alt="First NASA MODIS scene"/><img id="b" alt="Second NASA MODIS scene"/></div><p id="status"></p><h2>Methods and reproducibility</h2><p>Annual precipitation is calculated from monthly mean daily rates multiplied by calendar days. Annual temperature uses calendar-day weights. Monthly anomalies subtract the 2001–2025 calendar-month means. HAC uses three Bartlett-weighted lags, a finite-sample correction and approximate Student t inference. Trend confidence intervals are conditional on this model.</p><a href="https://power.larc.nasa.gov/docs/services/api/temporal/monthly/">NASA POWER documentation</a> · <a href="/example">Synthetic educational example</a><details><summary>NASA provenance</summary><pre id="provenance"></pre></details></main>
+<script>
+import * as echarts from 'echarts';
+const missions=await fetch('/missions.json').then(r=>r.json());
+const get=(id:string)=>document.getElementById(id)!;
+const val=(id:string)=>(get(id) as HTMLInputElement).value;
+get('mission').innerHTML=missions.map((m:any,i:number)=>'<option value="'+i+'">'+m.location+' · '+m.label+'</option>').join('');
+const chart=echarts.init(get('chart'));let active:any;
+function images(){
+ const [lon,lat]=active.coordinates;
+ ['first','second'].forEach((date,i)=>{
+ const params=new URLSearchParams({SERVICE:'WMS',VERSION:'1.1.1',REQUEST:'GetMap',LAYERS:'MODIS_Terra_CorrectedReflectance_TrueColor',STYLES:'',SRS:'EPSG:4326',BBOX:[lon-1.5,lat-1.5,lon+1.5,lat+1.5].join(','),WIDTH:'700',HEIGHT:'700',FORMAT:'image/jpeg',TIME:val(date)});
+ const img=get(i===0?'a':'b') as HTMLImageElement;
+ img.onerror=()=>get('status').textContent='An image could not load. Try another date.';
+ img.src='https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?'+params;
+ });
+ get('status').textContent='Window centered on '+lat+' latitude, '+lon+' longitude. Each image covers 3° × 3°. Blank areas may indicate missing coverage.';
+}
+function render(){
+ active=missions[Number(val('mission'))];const mode=val('mode');
+ const series:any[]=[{name:active.label,type:'line',data:active[mode],showSymbol:false,itemStyle:{color:'#46b896'}}];
+ if(mode==='values')series.push({name:'OLS trend',type:'line',data:active.fitted,showSymbol:false,lineStyle:{type:'dashed',color:'#e9b263'}});
+ chart.setOption({tooltip:{trigger:'axis'},legend:{bottom:0,textStyle:{color:'#c9dfd9'}},grid:{left:70,right:30,bottom:80},dataZoom:[{type:'inside'},{type:'slider',bottom:30}],xAxis:{type:'category',data:mode==='anomalies'?active.monthly_dates:active.years},yAxis:{type:'value',scale:true,name:mode==='anomalies'?active.monthly_unit:active.unit},series},true);
+ const metrics=[['Trend / decade',(active.slope*10).toFixed(3)+' '+active.unit],['HAC p-value',active.hac_p.toPrecision(3)],['95% HAC interval / decade',active.hac_interval.map((v:number)=>(v*10).toFixed(3)).join(' to ')],['Theil–Sen / decade',(active.theil_sen*10).toFixed(3)],['Residual lag-1 correlation',active.lag1.toFixed(3)],['OLS R²',active.r2.toFixed(3)]];
+ get('results').innerHTML='<div class="metrics">'+metrics.map(m=>'<div>'+m[0]+'<strong>'+m[1]+'</strong></div>').join('')+'</div><h2>Scientific interpretation</h2><p>The '+(active.slope>0?'positive':'negative')+' estimated trend '+(active.hac_p<.05?'meets':'does not meet')+' the 0.05 threshold under approximate HAC inference. '+active.caveat+'</p><p>Quality audit · 25 complete annual observations. Source metadata and original monthly values are retained. Endpoint sensitivity and spatial multiple-testing checks remain pending.</p><h3>Next investigation</h3><p>Compare '+(active.variable==='T2M'?'rainfall seasonality and land cover':'vegetation indices and rainfall anomalies')+' over the same region and dates. This rule-based suggestion requires additional evidence before attributing a cause.</p>';
+ get('provenance').textContent=JSON.stringify(active.header,null,2);images();
+}
+get('mission').onchange=render;get('mode').onchange=render;get('first').onchange=images;get('second').onchange=images;
+get('export').onclick=()=>{const u=URL.createObjectURL(new Blob([JSON.stringify(active,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=u;a.download='ferris-nasa-investigation.json';a.click();setTimeout(()=>URL.revokeObjectURL(u),1000)};
+new ResizeObserver(()=>chart.resize()).observe(get('chart'));render();
+</script><style is:global>
+body{background:#102b29;color:#d8e8df;font:16px/1.6 system-ui;margin:0}main{max-width:1200px;margin:auto;padding:45px 5%}h1{font-size:45px}h2{margin-top:35px}label{display:inline-block;margin:12px}select,input,button{padding:12px;background:#24443d;color:white;border:1px solid #537567;border-radius:8px;font:inherit}button{cursor:pointer}#chart{height:430px;margin:20px 0}.metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}.metrics>div{padding:20px;background:#1a3934;border-radius:12px;font-size:13px}strong{display:block;font-size:23px}.images{display:grid;grid-template-columns:1fr 1fr;gap:20px}img{width:100%;aspect-ratio:1;background:#081c19;border-radius:14px}a{color:#78d1b1}pre{white-space:pre-wrap}@media(max-width:700px){.metrics,.images{grid-template-columns:1fr}h1{font-size:32px}}
+</style></body></html>

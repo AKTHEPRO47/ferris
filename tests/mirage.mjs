@@ -1,0 +1,15 @@
+import assert from 'node:assert/strict';
+import {greenMirage,teachingExample} from '../apps/web/src/lib/mirage.ts';
+const sample=teachingExample();
+const result=greenMirage(sample);
+assert.equal(result.dates.length,84);
+assert.ok(result.slope<0);
+assert.ok(result.p>0&&result.p<=1);
+assert.deepEqual(result,greenMirage(sample));
+assert.throws(()=>greenMirage({...sample,sif_independent:false}),/Independent/);
+assert.throws(()=>greenMirage({...sample,rows:sample.rows.slice(1,50)}),/72/);
+const duplicate=structuredClone(sample);duplicate.rows[1].date=duplicate.rows[0].date;
+assert.throws(()=>greenMirage(duplicate),/consecutive/);
+const bad=structuredClone(sample);bad.rows[0].quality_pass=false;
+assert.throws(()=>greenMirage(bad),/quality/);
+console.log('Green Mirage: seven acceptance checks passed');

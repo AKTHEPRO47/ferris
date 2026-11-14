@@ -1,0 +1,38 @@
+---
+import Page from '../layouts/Page.astro';
+---
+<Page title="Green Mirage" description="Investigate divergence between vegetation greenness and independent fluorescence observations.">
+<article><h2 id="origin">Load matched observations or explore the teaching example.</h2><p>Real NDVI and OCO-2 fluorescence pairs are not bundled. Import a documented, quality-screened monthly record with matching spatial support. Source metadata is user-supplied and needs independent verification.</p><label>Import paired JSON<input id="file" type="file" accept=".json,application/json"/></label><button id="example">Run synthetic teaching example</button><button id="template">Download example and schema</button><button id="export" disabled>Export analysis</button><p id="status" role="status"></p></article>
+<section id="result" hidden><label>Chart<select id="view"><option value="signals">Standardized seasonal anomalies</option><option value="divergence">SIF minus NDVI divergence</option></select></label><div id="mirage-chart" class="chart"></div><article><h2 id="finding"></h2><p id="statistics"></p><p id="interpretation"></p><p id="method"></p><a href="/atlas">Compare regional climate trends ↗</a> · <a href="/twin">Explore conditional scenarios ↗</a></article></section>
+<details><summary>Input contract and scientific controls</summary><p>JSON must contain kind, region, ndvi_source, sif_source, sif_units, sif_independent, matching_method, quality_method and rows. Each row contains date (YYYY-MM), ndvi, sif, count and quality_pass. At least 72 consecutive matched months are needed. First 36 months form the seasonal baseline. Each analysis month requires at least three matched observations and a passed upstream quality flag.</p><p>Document the SIF retrieval wavelength, product version, units, viewing geometry, cloud/quality screening and aggregation footprint in the metadata. Spatial matching and retrieval quality must be completed before import. Imported flags are declarations, not independently verified quality checks. The sample-count threshold is an application rule, not a NASA product standard.</p><p>Reflectance-derived SIF can share inputs with NDVI. This tool requires independent SIF observations to reduce that circularity. A negative divergence trend describes a changing relationship between signals. Ecological stress interpretation requires additional evidence.</p><a href="https://oco.caltech.edu/science/data-access">OCO data access</a> · <a href="https://essd.copernicus.org/articles/14/1513/2022/">SIF product methodology</a> · <a href="https://daac.ornl.gov/VEGETATION/guides/Global_High_Res_SIF_OCO2.html">Reflectance-derived SIF documentation</a></details>
+</Page>
+<script>
+import * as echarts from 'echarts';
+import {greenMirage,teachingExample,type PairedInput} from '../lib/mirage';
+const get=(id:string)=>document.getElementById(id)!;
+let input:PairedInput,result:ReturnType<typeof greenMirage>,chart:echarts.ECharts;
+function download(data:unknown,name:string){const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));const link=document.createElement('a');link.href=url;link.download=name;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000)}
+function render(){
+ if(!result)return;
+ const difference=(get('view') as HTMLSelectElement).value==='divergence';
+ chart??=echarts.init(get('mirage-chart'));chart.resize();
+ chart.setOption({tooltip:{trigger:'axis'},legend:{bottom:0,textStyle:{color:'#dfebe7'}},grid:{left:65,right:20,bottom:65},xAxis:{type:'category',data:result.dates},yAxis:{type:'value',name:'Standardized units',scale:true},series:difference?[{name:'D = Z(SIF) − Z(NDVI)',type:'line',data:result.divergence,showSymbol:false}]:[{name:'NDVI',type:'line',data:result.ndvi,showSymbol:false},{name:'SIF',type:'line',data:result.sif,showSymbol:false}],color:['#8adab6','#e9b578']},true);
+}
+function analyze(record:PairedInput){
+ get('result').hidden=true;(get('export') as HTMLButtonElement).disabled=true;
+ try{
+ result=greenMirage(record);input=record;get('result').hidden=false;
+ get('origin').textContent=(input.kind==='synthetic'?'SYNTHETIC TEACHING EXAMPLE · ':'IMPORTED OBSERVATIONS · ')+input.region;
+ get('finding').textContent=result.candidate?'Divergence screening criteria met':'Divergence screening criteria not met';
+ get('statistics').textContent='Divergence slope '+result.slope.toFixed(3)+' standardized units/year · approximate 95% block-bootstrap interval '+result.interval.map(v=>v.toFixed(3)).join(' to ')+' · approximate bootstrap p '+result.p.toPrecision(3)+'.';
+ get('interpretation').textContent='NDVI slope '+result.ndvi_slope.toFixed(3)+'; SIF slope '+result.sif_slope.toFixed(3)+'. The candidate screen requires nonnegative NDVI slope, negative SIF slope, and a divergence interval entirely below zero. '+(input.kind==='synthetic'?'These generated values demonstrate the method and do not describe an observed ecosystem.':'Assess product uncertainty, sampling changes and baseline sensitivity before interpreting ecological mechanisms.');
+ get('method').textContent=result.method;get('status').textContent='Analyzed '+result.dates.length+' paired analysis months. Baseline '+result.baseline.join(' to ')+'.';(get('export') as HTMLButtonElement).disabled=false;render();
+ }catch(error){get('status').textContent=error instanceof Error?error.message:'Unable to analyze file.'}
+}
+get('example').onclick=()=>analyze(teachingExample());
+get('template').onclick=()=>download(teachingExample(),'ferris-synthetic-paired-example.json');
+get('export').onclick=()=>download({input,result},'ferris-green-mirage.json');
+get('view').onchange=render;
+get('file').onchange=async()=>{const file=(get('file') as HTMLInputElement).files?.[0];if(!file)return;if(file.size>2000000){get('status').textContent='Maximum file size is 2 MB.';return}try{analyze(JSON.parse(await file.text()))}catch{get('status').textContent='The file must contain valid JSON.'}};
+new ResizeObserver(()=>chart?.resize()).observe(get('mirage-chart'));
+</script>

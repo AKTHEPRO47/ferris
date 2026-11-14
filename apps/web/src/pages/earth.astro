@@ -1,0 +1,65 @@
+---
+import Page from '../layouts/Page.astro';
+---
+<Page title="Earth observation globe" description="Rotate the planet, select a research location, and explore the evidence behind its changing climate.">
+<label>Measurement<select id="variable"><option value="T2M">Temperature</option><option value="PRECTOTCORR">Precipitation</option></select></label><label>Research location<select id="location"><option>Borneo</option><option>Sumatra</option><option>Singapore</option></select></label><label><input id="rotate" type="checkbox" checked/> Auto-rotate</label><label>Sun direction<input id="sun" type="range" min="0" max="360" value="45"/></label><button id="focus">Focus location</button>
+<div id="globe" tabindex="0" aria-label="Interactive 3D Earth. Drag to rotate, scroll to zoom, or choose a location from the selector."></div><p id="status" role="status">Loading the globe…</p>
+<article id="evidence"><h2 id="title"></h2><p id="summary"></p><a id="report">Research report ↗</a> · <a href="/atlas">Contradiction Atlas ↗</a> · <a href="/twin">Digital Twin Lab ↗</a> · <a href="/mirage">Green Mirage ↗</a></article>
+<p>Surface texture · NASA GIBS Blue Marble Next Generation. Markers locate three prepared NASA POWER grid requests. Marker colors indicate positive or negative estimated trends. Lighting is an illustrative viewing control. The globe is a geographic visualization with research links.</p>
+</Page>
+<script>
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+const get=(id:string)=>document.getElementById(id)!;
+const value=(id:string)=>(get(id) as HTMLInputElement).value;
+const missions=await fetch('/missions.json').then(r=>r.json());
+const host=get('globe');
+let renderer:THREE.WebGLRenderer;
+function evidence(){
+ const m=missions.find((item:any)=>item.location===value('location')&&item.variable===value('variable'));
+ get('title').textContent=m.location+' · '+m.label;
+ get('summary').textContent='2001–2025 trend per decade '+(m.slope*10).toFixed(3)+' '+m.unit+' · approximate HAC p '+m.hac_p.toPrecision(3)+' · coordinates '+m.coordinates.join(', ')+'.';
+ (get('report') as HTMLAnchorElement).href='/reports?mission='+encodeURIComponent(m.id);
+}
+evidence();
+try{
+ renderer=new THREE.WebGLRenderer({antialias:true,alpha:true});
+ renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));host.append(renderer.domElement);
+ const scene=new THREE.Scene();
+ const camera=new THREE.PerspectiveCamera(42,1,.1,100);camera.position.set(0,0,3.5);
+ const controls=new OrbitControls(camera,renderer.domElement);controls.enableDamping=true;controls.minDistance=1.35;controls.maxDistance=6;controls.enablePan=false;controls.autoRotate=true;controls.autoRotateSpeed=.35;
+ const texture=new THREE.TextureLoader().load('/images/earth.jpg',()=>get('status').textContent='Drag to orbit · scroll to zoom · select a marker to inspect its evidence.',undefined,()=>get('status').textContent='The surface image could not load. Location controls remain available.');
+ texture.colorSpace=THREE.SRGBColorSpace;
+ const globe=new THREE.Mesh(new THREE.SphereGeometry(1,96,64),new THREE.MeshPhongMaterial({map:texture,shininess:5}));
+ scene.add(globe);scene.add(new THREE.AmbientLight(0xffffff,1.4));
+ const sunlight=new THREE.DirectionalLight(0xfff1d6,2);sunlight.position.set(3,2,3);scene.add(sunlight);
+ const atmosphere=new THREE.Mesh(new THREE.SphereGeometry(1.02,64,48),new THREE.MeshBasicMaterial({color:0x74c8e6,transparent:true,opacity:.09,side:THREE.BackSide}));scene.add(atmosphere);
+ function position(lon:number,lat:number,radius=1.015){const latitude=lat*Math.PI/180,longitude=lon*Math.PI/180;return new THREE.Vector3(radius*Math.cos(latitude)*Math.cos(longitude),radius*Math.sin(latitude),-radius*Math.cos(latitude)*Math.sin(longitude))}
+ const markers:THREE.Mesh[]=[];
+ for(const m of missions.filter((item:any)=>item.variable==='T2M')){
+  const marker=new THREE.Mesh(new THREE.SphereGeometry(.018,16,12),new THREE.MeshBasicMaterial({color:0xffb866}));
+  marker.position.copy(position(m.coordinates[0],m.coordinates[1]));marker.userData.location=m.location;scene.add(marker);markers.push(marker);
+ }
+ function update(){
+  evidence();
+  for(const marker of markers){const m=missions.find((item:any)=>item.location===marker.userData.location&&item.variable===value('variable'));(marker.material as THREE.MeshBasicMaterial).color.set(m.slope>=0?0xffb866:0x7ab9ef);marker.scale.setScalar(marker.userData.location===value('location')?1.5:1)}
+ }
+ function focus(){const m=missions.find((item:any)=>item.location===value('location'));camera.position.copy(position(m.coordinates[0],m.coordinates[1],2.8));controls.update();update()}
+ get('focus').onclick=focus;get('location').onchange=focus;get('variable').onchange=update;
+ get('rotate').onchange=()=>controls.autoRotate=(get('rotate') as HTMLInputElement).checked;
+ get('sun').oninput=()=>{const angle=Number(value('sun'))*Math.PI/180;sunlight.position.set(4*Math.cos(angle),2,4*Math.sin(angle))};
+ const raycaster=new THREE.Raycaster();let startX=0,startY=0;
+ renderer.domElement.addEventListener('pointerdown',event=>{startX=event.clientX;startY=event.clientY});
+ renderer.domElement.addEventListener('pointerup',event=>{
+  if(Math.hypot(event.clientX-startX,event.clientY-startY)>5)return;
+  const rect=renderer.domElement.getBoundingClientRect();const point=new THREE.Vector2((event.clientX-rect.left)/rect.width*2-1,-(event.clientY-rect.top)/rect.height*2+1);
+  raycaster.setFromCamera(point,camera);const hit=raycaster.intersectObjects([globe,...markers])[0];
+  if(hit?.object.userData.location){(get('location') as HTMLSelectElement).value=hit.object.userData.location;update()}
+ });
+ const observer=new ResizeObserver(()=>{const width=host.clientWidth,height=host.clientHeight;renderer.setSize(width,height);camera.aspect=width/height;camera.updateProjectionMatrix()});observer.observe(host);
+ renderer.setAnimationLoop(()=>{controls.update();renderer.render(scene,camera)});
+ document.addEventListener('visibilitychange',()=>{if(document.hidden)renderer.setAnimationLoop(null);else renderer.setAnimationLoop(()=>{controls.update();renderer.render(scene,camera)})});
+ focus();
+}catch{get('status').textContent='3D rendering is unavailable in this browser. Use the location selector to inspect the evidence.';get('location').onchange=evidence;get('variable').onchange=evidence;}
+</script>
+<style>#globe{height:min(70vh,680px);min-height:360px;background:radial-gradient(ellipse,#183b4b,#030d15);border-radius:20px;overflow:hidden;margin:20px 0;touch-action:none}#globe canvas{display:block}</style>
