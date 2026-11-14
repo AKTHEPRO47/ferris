@@ -2,7 +2,9 @@
 import Page from '../layouts/Page.astro';
 ---
 <Page title="Satellite explorer" description="Compare dated NASA MODIS Terra imagery over a geographic window.">
-<label>Latitude<input id="lat" type="number" value="1.35" min="-85" max="85" step=".01"/></label><label>Longitude<input id="lon" type="number" value="103.82" min="-175" max="175" step=".01"/></label><label>Window width in degrees<input id="extent" type="number" value="0.8" min=".1" max="10" step=".1"/></label>
+<section class="location-picker"><div><h2>Pinpoint your observation</h2><p>Drag to rotate, scroll or pinch to zoom, then tap the surface to drop a pin.</p><div id="pick-globe" tabindex="0" role="application" aria-label="Location globe. Arrow keys move the pin one degree. Shift and arrow keys move one tenth degree."></div><p id="globe-status" role="status"></p></div>
+<aside><h2 id="place-name">Singapore</h2><p id="pin-coordinates" aria-live="polite"></p><label>Jump to a place<select id="place"><option>Singapore</option><option>Borneo</option><option>London</option><option>New York</option><option>Sydney</option><option value="Custom" disabled>Custom pin</option></select></label><button id="home-pin">Return to Singapore</button><h3>Facts about this view</h3><p id="geo-facts"></p><p id="window-facts"></p><p>True-color MODIS imagery combines red, green and blue bands. Its finest visualization is scaled to 250 metres per pixel at the equator; zooming does not reveal individual buildings.</p><a href="https://gis.earthdata.nasa.gov/portal/home/item.html?id=780c03ffe3dc42e8bb03ca3b07bb283e" target="_blank" rel="noreferrer">NASA imagery facts</a><p>The Blue Marble globe is a navigation surface. Dated satellite observations appear below.</p></aside></section>
+<label>Window width in degrees<input id="extent" type="number" value="0.8" min=".1" max="10" step=".1"/></label>
 <label>First date<input id="first" type="date" value="2008-01-04"/></label><label>Second date<input id="second" type="date" value="2020-01-04"/></label><button id="load">Load observations</button>
 <p id="status" role="status"></p>
 <label>Swipe comparison<input id="swipe" type="range" min="0" max="100" value="50"/></label>
@@ -11,12 +13,16 @@ import Page from '../layouts/Page.astro';
 <article><h2>Interpreting imagery</h2><p>True-color imagery shows visible landscape context. Cloud, smoke, illumination, sensor geometry and missing coverage can affect the comparison. The swipe view does not calculate vegetation change. Quantitative NDVI analysis requires calibrated red and near-infrared reflectance with quality masking.</p><p>Source layer · MODIS_Terra_CorrectedReflectance_TrueColor. WMS 1.1.1, EPSG:4326, 900 × 900 pixels.</p></article>
 </Page>
 <script>
+import { createLocationGlobe } from '../lib/location-globe';
+let selectedLat=1.35,selectedLon=103.82;
 const field=(id:string)=>(document.getElementById(id) as HTMLInputElement).value;
 function load(){
- const lat=Number(field('lat')),lon=Number(field('lon')),extent=Number(field('extent'));
+ const lat=selectedLat,lon=selectedLon,extent=Number(field('extent'));
  const status=document.getElementById('status')!;
- if(!Number.isFinite(lat)||!Number.isFinite(lon)||extent<.1||extent>10||Math.abs(lat)>85||Math.abs(lon)>175||!field('first')||!field('second')){status.textContent='Enter valid coordinates, dates, and a window from 0.1 to 10 degrees.';return;}
- const bounds=[lon-extent/2,lat-extent/2,lon+extent/2,lat+extent/2];
+ if(!Number.isFinite(lat)||!Number.isFinite(lon)||!Number.isFinite(extent)||extent<.1||extent>10||Math.abs(lat)>90||Math.abs(lon)>180||!field('first')||!field('second')){status.textContent='Choose a location, valid dates, and a window from 0.1 to 10 degrees.';return;}
+ const bounds=[Math.max(-180,lon-extent/2),Math.max(-90,lat-extent/2),Math.min(180,lon+extent/2),Math.min(90,lat+extent/2)];
+ document.getElementById('window-facts')!.textContent='Approximate window: '+((bounds[2]-bounds[0])*111.2*Math.cos(lat*Math.PI/180)).toFixed(0)+' km east-west by '+((bounds[3]-bounds[1])*111.2).toFixed(0)+' km north-south at the pin, using spherical geometry. Windows clip at the poles and date line.';
+
  let completed=0;status.textContent='Requesting NASA imagery…';
  ['before','after'].forEach((id,i)=>{
  const image=document.getElementById(id) as HTMLImageElement;
@@ -24,11 +30,14 @@ function load(){
  image.onerror=()=>status.textContent='A NASA imagery request failed. Try another date or use Worldview.';
  image.src='https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?'+new URLSearchParams({SERVICE:'WMS',VERSION:'1.1.1',REQUEST:'GetMap',LAYERS:'MODIS_Terra_CorrectedReflectance_TrueColor',STYLES:'',SRS:'EPSG:4326',BBOX:bounds.join(','),WIDTH:'900',HEIGHT:'900',FORMAT:'image/jpeg',TIME:field(i?'second':'first')});
  });
- document.getElementById('caption')!.textContent='First observation '+field('first')+' · Second observation '+field('second')+' · Bounds '+bounds.join(', ');
+ document.getElementById('caption')!.textContent='First observation '+field('first')+' · Second observation '+field('second')+' · Bounds '+bounds.map(v=>v.toFixed(3)).join(', ');
  (document.getElementById('external') as HTMLAnchorElement).href='https://worldview.earthdata.nasa.gov/?v='+bounds.join(',')+'&t='+field('second');
 }
+createLocationGlobe((lat,lon)=>{selectedLat=lat;selectedLon=lon;load();});
 document.getElementById('load')!.onclick=load;
 document.getElementById('swipe')!.oninput=()=>document.getElementById('after')!.style.clipPath='inset(0 '+(100-Number(field('swipe')))+'% 0 0)';
-document.getElementById('after')!.style.clipPath='inset(0 50% 0 0)';load();
+document.getElementById('after')!.style.clipPath='inset(0 50% 0 0)';
 </script>
 <style>.viewer{position:relative;width:min(100%,850px);aspect-ratio:1;background:#071c18}.viewer img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}</style>
+
+<style>.location-picker{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(270px,1fr);gap:24px}.location-picker aside{padding:24px;margin:0}#pick-globe{height:460px;background:radial-gradient(ellipse,#13344b,#050d1b);border:1px solid #365771;border-radius:16px;overflow:hidden;touch-action:none}#pick-globe canvas{display:block}@media(max-width:750px){.location-picker{grid-template-columns:1fr}#pick-globe{height:350px}}</style>
