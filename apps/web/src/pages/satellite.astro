@@ -2,8 +2,8 @@
 import Page from '../layouts/Page.astro';
 ---
 <Page title="Satellite explorer" description="Compare dated NASA MODIS Terra imagery over a geographic window.">
-<label>Latitude<input id="lat" type="number" value="-2.2" min="-85" max="85" step=".01"/></label><label>Longitude<input id="lon" type="number" value="113.9" min="-175" max="175" step=".01"/></label><label>Window width in degrees<input id="extent" type="number" value="3" min=".1" max="10" step=".1"/></label>
-<label>First date<input id="first" type="date" value="2020-08-15"/></label><label>Second date<input id="second" type="date" value="2024-08-15"/></label><button id="load">Load observations</button>
+<label>Latitude<input id="lat" type="number" value="1.35" min="-85" max="85" step=".01"/></label><label>Longitude<input id="lon" type="number" value="103.82" min="-175" max="175" step=".01"/></label><label>Window width in degrees<input id="extent" type="number" value="0.8" min=".1" max="10" step=".1"/></label>
+<label>First date<input id="first" type="date" value="2008-01-04"/></label><label>Second date<input id="second" type="date" value="2020-01-04"/></label><button id="load">Load observations</button>
 <p id="status" role="status"></p>
 <label>Swipe comparison<input id="swipe" type="range" min="0" max="100" value="50"/></label>
 <div class="viewer"><img id="before" alt="First dated MODIS observation"/><img id="after" alt="Second dated MODIS observation"/></div>
