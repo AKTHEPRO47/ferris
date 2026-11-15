@@ -1,17 +1,13 @@
 ---
 import '../styles/theme.css';
 import OrbitalBackground from './OrbitalBackground.astro';
-const { title } = Astro.props;
+import { navGroups as groups } from '../lib/navigation';
+const { title, background = true } = Astro.props;
 const path = Astro.url.pathname.replace(/\/$/,'') || '/';
-const groups = [
-  { label: 'Investigate', links: [['/','Mission control'],['/discover','Guided discovery'],['/satellite','Satellite explorer'],['/compare','Compare regions'],['/ml','ML Lab']] },
-  { label: 'Earth systems', links: [['/earth','3D Earth'],['/mirage','Green Mirage'],['/atlas','Contradiction Atlas'],['/twin','Digital Twin']] },
-  { label: 'Reference', links: [['/methods','Science guide'],['/reports','Research reports'],['/catalog','Data catalog'],['/faq','FAQ'],['/example','Learning lab']] }
-];
 const normalize = (value:string)=> value.replace(/\/$/,'') || '/';
 const current = (href:string)=> path===normalize(href);
 ---
-<OrbitalBackground/>
+{background ? <OrbitalBackground/> : null}
 <nav aria-label="Main navigation"><a class="brand" href="/">ferris<span class="brand-caption">Earth intelligence</span></a><button class="nav-toggle" type="button" aria-expanded="false" aria-controls="nav-links">Menu</button><div class="nav-links" id="nav-links">{groups.map((group,index)=><div class="nav-group"><button class="nav-group-toggle" type="button" aria-expanded="false" aria-controls={'nav-group-'+(index+1)}>{group.label}<span class="chev" aria-hidden="true"></span></button><p class="nav-group-label">{group.label}</p><div class="nav-group-menu" id={'nav-group-'+(index+1)}>{group.links.map(([href,label])=><a href={href} aria-current={current(href)?'page':undefined}>{label}</a>)}</div></div>)}</div></nav>
 <script>
   const nav = document.querySelector('nav') as HTMLElement | null;
