@@ -1,8 +1,7 @@
 ---
 import Page from '../layouts/Page.astro';
 ---
-<Page title="Machine Learning Lab" description="Test a trained climate model against unseen NASA observations, then explore your own inputs.">
-<p class="eyebrow">TRAINED ON NASA POWER · RIDGE REGRESSION · HELD-OUT TESTING</p>
+<Page title="Machine Learning Lab" description="Test a trained climate model against unseen NASA observations, then explore your own inputs. Trained on NASA POWER with ridge regression and held-out testing.">
 <label>Trained model<select id="ml-model"></select></label>
 <button id="ml-export">Download model and test results</button> <a href="/reports/Ferris_Eight_Features.pdf" download>Download illustrated feature report (PDF)</a>
 <div id="ml-metrics" class="grid"></div>
@@ -65,6 +64,6 @@ try {
 } catch(error){get('ml-result').textContent='The trained models could not load. Refresh the page to try again.';console.error(error);}
 </script>
 <style>
-.eyebrow{font-size:11px;letter-spacing:1.8px;color:#9ce9ee}#ml-result{margin-top:22px;padding:18px;border-left:3px solid #91e4ec;background:#0b192c}#ml-chart{background:#0b192c;border:1px solid #30425d;border-radius:12px;margin:20px 0}.grid article{margin:0}.grid h2{font-size:22px}
+#ml-result{margin-top:22px;padding:18px;border:1px solid #1c2738;border-radius:10px;background:#0d1726}#ml-chart{background:#0d1726;border:1px solid #1c2738;border-radius:10px;margin:20px 0}.grid article{margin:0}.grid h2{font-size:22px}
 </style>
 

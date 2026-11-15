@@ -12,54 +12,35 @@
     host.appendChild(renderer.domElement);
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, .1, 100);
-    camera.position.z = 24;
-    scene.add(new THREE.AmbientLight(0x7894b0, 1.3));
-    const light = new THREE.DirectionalLight(0x91edff, 3.8);
-    light.position.set(-6, 8, 10); scene.add(light);
-    const rim = new THREE.DirectionalLight(0xa58bff, 2.4);
-    rim.position.set(7, -2, 1); scene.add(rim);
+    camera.position.z = 30;
     let seed = 47;
     const random = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
-    const rocks: { mesh: THREE.Mesh; y: number; phase: number; speed: number }[] = [];
-    for (let i = 0; i < 12; i++) {
-      const geometry = new THREE.IcosahedronGeometry(1, 1);
-      const vertices = geometry.attributes.position;
-      // Matching vertex positions receive identical displacement, keeping facets joined.
-      for (let j = 0; j < vertices.count; j++) {
-        const x = vertices.getX(j), y = vertices.getY(j), z = vertices.getZ(j);
-        const scale = .82 + .22 * Math.sin(x * 7 + i) * Math.cos(y * 9 + z * 4);
-        vertices.setXYZ(j, x * scale, y * scale, z * scale);
-      }
-      geometry.computeVertexNormals();
-      const material = new THREE.MeshStandardMaterial({ color: i % 3 ? 0x30465d : 0x455078, roughness: .94, metalness: .16, flatShading: true });
-      const mesh = new THREE.Mesh(geometry, material);
-      const side = i % 2 ? 1 : -1;
-      mesh.position.set(side * (7.8 + random() * 5), (random() - .5) * 23, -random() * 9);
-      mesh.scale.setScalar(.35 + random() * 1.15);
-      mesh.rotation.set(random() * 3, random() * 3, random() * 3);
-      scene.add(mesh); rocks.push({ mesh, y: mesh.position.y, phase: random() * 6, speed: .035 + random() * .045 });
-    }
-    const stars = new Float32Array(180 * 3);
+    // A quiet starfield: static points, no twinkle, no parallax churn.
+    const stars = new Float32Array(150 * 3);
     for (let i = 0; i < stars.length; i += 3) {
-      stars[i] = (random() - .5) * 65; stars[i + 1] = (random() - .5) * 40; stars[i + 2] = -10 - random() * 20;
+      stars[i] = (random() - .5) * 70; stars[i + 1] = (random() - .5) * 44; stars[i + 2] = -12 - random() * 22;
     }
     const starGeometry = new THREE.BufferGeometry();
     starGeometry.setAttribute('position', new THREE.BufferAttribute(stars, 3));
-    scene.add(new THREE.Points(starGeometry, new THREE.PointsMaterial({ color: 0x98c9e4, size: .045, transparent: true, opacity: .65 })));
+    scene.add(new THREE.Points(starGeometry, new THREE.PointsMaterial({ color: 0x8fa9c4, size: .05, transparent: true, opacity: .5 })));
+    // One faint orbital path replaces the tumbling asteroid field.
+    const ring = new THREE.Mesh(
+      new THREE.TorusGeometry(13, .05, 8, 180),
+      new THREE.MeshBasicMaterial({ color: 0x3a5a72, transparent: true, opacity: .38, depthWrite: false })
+    );
+    ring.position.set(11, -9, -13);
+    ring.rotation.set(1.15, .35, .2);
+    scene.add(ring);
     let paused = reduced.matches;
     try { const preference = localStorage.getItem('ferris-background-paused'); if (preference !== null) paused = preference === 'true' || reduced.matches; } catch {}
-    let frame = 0, last = 0, elapsed = 0;
+    let frame = 0, last = 0;
     const draw = () => renderer!.render(scene, camera);
     function animate(now: number) {
       if (paused || document.hidden) { frame = 0; return; }
       frame = requestAnimationFrame(animate);
-      if (now - last < 33) return;
-      const delta = Math.min((now - last) / 1000, .1); last = now; elapsed += delta;
-      for (const rock of rocks) {
-        rock.mesh.rotation.y += delta * rock.speed;
-        rock.mesh.rotation.x += delta * rock.speed * .4;
-        rock.mesh.position.y = rock.y + Math.sin(elapsed * .12 + rock.phase) * .65;
-      }
+      if (now - last < 50) return;
+      const delta = Math.min((now - last) / 1000, .12); last = now;
+      ring.rotation.z += delta * .01;
       draw();
     }
     function sync() {
@@ -84,7 +65,7 @@
     window.addEventListener('pageshow', sync);
     resize(); sync();
   } catch {
-    // The CSS starfield remains available on devices without WebGL.
+    // The CSS backdrop remains available on devices without WebGL.
     renderer?.dispose(); host.replaceChildren(); toggle.hidden = true;
   }
 </script>
