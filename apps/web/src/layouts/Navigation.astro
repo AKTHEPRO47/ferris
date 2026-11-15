@@ -3,18 +3,19 @@ import '../styles/theme.css';
 import OrbitalBackground from './OrbitalBackground.astro';
 const { title } = Astro.props;
 const path = Astro.url.pathname.replace(/\/$/,'') || '/';
-const primary = [['/','Mission control'],['/discover','Guided discovery'],['/compare','Compare regions'],['/satellite','Satellite explorer'],['/ml','ML Lab'],['/methods','Science guide'],['/reports','Research reports']];
-const secondary = [['/earth','3D Earth'],['/mirage','Green Mirage'],['/atlas','Contradiction Atlas'],['/twin','Digital Twin'],['/catalog','Data catalog'],['/faq','FAQ'],['/example','Learning lab']];
-const current = (href:string)=> path===href.replace(/\/$/,'');
+const groups = [
+  { label: 'Investigate', links: [['/','Mission control'],['/discover','Guided discovery'],['/satellite','Satellite explorer'],['/compare','Compare regions'],['/ml','ML Lab']] },
+  { label: 'Earth systems', links: [['/earth','3D Earth'],['/mirage','Green Mirage'],['/atlas','Contradiction Atlas'],['/twin','Digital Twin']] },
+  { label: 'Reference', links: [['/methods','Science guide'],['/reports','Research reports'],['/catalog','Data catalog'],['/faq','FAQ'],['/example','Learning lab']] }
+];
+const normalize = (value:string)=> value.replace(/\/$/,'') || '/';
+const current = (href:string)=> path===normalize(href);
 ---
 <OrbitalBackground/>
-<nav aria-label="Main navigation"><a class="brand" href="/">ferris<span class="brand-caption">Earth intelligence</span></a><button class="nav-toggle" type="button" aria-expanded="false" aria-controls="nav-links">Menu</button><div class="nav-links" id="nav-links">{primary.map(([href,label])=><a href={href} aria-current={current(href)?'page':undefined}>{label}</a>)}<div class="more"><button class="more-toggle" type="button" aria-expanded="false" aria-controls="more-menu">More<span class="chev" aria-hidden="true"></span></button><div class="more-menu" id="more-menu">{secondary.map(([href,label])=><a href={href} aria-current={current(href)?'page':undefined}>{label}</a>)}</div></div></div></nav>
+<nav aria-label="Main navigation"><a class="brand" href="/">ferris<span class="brand-caption">Earth intelligence</span></a><button class="nav-toggle" type="button" aria-expanded="false" aria-controls="nav-links">Menu</button><div class="nav-links" id="nav-links">{groups.map((group,index)=><div class="nav-group"><button class="nav-group-toggle" type="button" aria-expanded="false" aria-controls={'nav-group-'+(index+1)}>{group.label}<span class="chev" aria-hidden="true"></span></button><p class="nav-group-label">{group.label}</p><div class="nav-group-menu" id={'nav-group-'+(index+1)}>{group.links.map(([href,label])=><a href={href} aria-current={current(href)?'page':undefined}>{label}</a>)}</div></div>)}</div></nav>
 <script>
   const nav = document.querySelector('nav') as HTMLElement | null;
   const navToggle = document.querySelector('.nav-toggle') as HTMLButtonElement | null;
-  const more = document.querySelector('nav .more') as HTMLElement | null;
-  const moreToggle = document.querySelector('.more-toggle') as HTMLButtonElement | null;
-
   if (nav && navToggle) {
     const setNav = (open: boolean) => { nav.classList.toggle('nav-open', open); navToggle.setAttribute('aria-expanded', String(open)); };
     navToggle.addEventListener('click', () => setNav(!nav.classList.contains('nav-open')));
@@ -24,42 +25,64 @@ const current = (href:string)=> path===href.replace(/\/$/,'');
     });
   }
 
-  if (more && moreToggle) {
-    const setMore = (open: boolean) => { more.classList.toggle('is-open', open); moreToggle.setAttribute('aria-expanded', String(open)); };
-    moreToggle.addEventListener('click', (event) => { event.stopPropagation(); setMore(!more.classList.contains('is-open')); });
-    document.addEventListener('click', (event) => { if (!more.contains(event.target as Node)) setMore(false); });
-    document.addEventListener('keydown', (event) => {
-      if (event.key === 'Escape' && more.classList.contains('is-open')) { setMore(false); moreToggle.focus(); }
+  const groups = [...document.querySelectorAll('nav .nav-group')] as HTMLElement[];
+  const closeGroup = (group: HTMLElement) => {
+    group.classList.remove('is-open');
+    group.querySelector<HTMLButtonElement>('.nav-group-toggle')?.setAttribute('aria-expanded', 'false');
+  };
+  const closeGroups = (except?: HTMLElement) => { for (const group of groups) if (group !== except) closeGroup(group); };
+  for (const group of groups) {
+    const toggle = group.querySelector<HTMLButtonElement>('.nav-group-toggle');
+    if (!toggle) continue;
+    toggle.addEventListener('click', (event) => {
+      event.stopPropagation();
+      const open = !group.classList.contains('is-open');
+      closeGroups(group);
+      group.classList.toggle('is-open', open);
+      toggle.setAttribute('aria-expanded', String(open));
     });
-    more.addEventListener('focusout', (event) => { if (!more.contains(event.relatedTarget as Node)) setMore(false); });
+    group.addEventListener('focusout', (event) => { if (!group.contains(event.relatedTarget as Node)) closeGroup(group); });
   }
+  document.addEventListener('click', (event) => { if (!(event.target as Node).closest('nav .nav-group')) closeGroups(); });
+  document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape') return;
+    const open = document.querySelector('nav .nav-group.is-open') as HTMLElement | null;
+    if (!open) return;
+    closeGroup(open);
+    open.querySelector<HTMLButtonElement>('.nav-group-toggle')?.focus();
+  });
 </script>
 <style is:global>
 nav{padding:12px 5%;display:flex;gap:20px;align-items:center;flex-wrap:wrap;background:#0a1220;border-bottom:1px solid #1c2738}nav .brand{font-size:29px;font-weight:600;letter-spacing:-1px;color:#e7eef5;text-decoration:none}nav>div{display:flex;gap:4px;flex-wrap:wrap}nav>div>a{padding:8px 10px;border-radius:7px;text-decoration:none;font-size:12px;color:#a9bacd}nav a[aria-current=page]{background:#15243a;color:#d6e9ef}a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid #9ed0da;outline-offset:3px}
 nav .nav-links{margin-left:auto}
 nav .nav-toggle{display:none}
-nav .more{position:relative}
-nav .more-toggle{display:inline-flex;align-items:center;gap:6px;padding:8px 10px!important;border:1px solid transparent!important;border-radius:7px!important;background:transparent!important;color:#a9bacd!important;font-weight:400!important;font-size:12px;line-height:1.4;cursor:pointer}
-nav .more-toggle:hover{background:#15243a!important;color:#d6e9ef!important;border-color:#22344a!important}
-nav .more-toggle .chev{width:6px;height:6px;border-right:1px solid currentColor;border-bottom:1px solid currentColor;transform:rotate(45deg) translateY(-1px);transition:transform .16s cubic-bezier(.22,1,.36,1)}
-nav .more.is-open .more-toggle{background:#15243a!important;color:#d6e9ef!important;border-color:#22344a!important}
-nav .more.is-open .more-toggle .chev{transform:rotate(-135deg) translateY(-1px)}
-nav .more-menu{display:none;position:absolute;top:calc(100% + 8px);right:0;z-index:40;min-width:210px;padding:6px;background:var(--surface);border:1px solid var(--edge);border-radius:10px;box-shadow:0 12px 32px #00000059;grid-template-columns:1fr;gap:2px}
-nav .more.is-open .more-menu{display:grid}
-nav .more-menu a{padding:8px 10px;border:1px solid transparent;border-radius:7px;font-size:12px;color:#a9bacd!important;text-decoration:none;white-space:nowrap}
-nav .more-menu a:hover,nav .more-menu a[aria-current=page]{background:#15243a;color:#d6e9ef!important;border-color:#22344a}
-nav .more:has(a[aria-current=page]) .more-toggle{color:#d6e9ef!important}
-@media(max-width:1080px){
-nav .nav-toggle{display:inline-flex;align-items:center;gap:8px;margin-left:auto;height:36px;padding:0 14px!important;background:transparent!important;border:1px solid var(--edge)!important;color:var(--ink)!important;font-weight:500!important;font-size:12px}
+nav .nav-group{position:relative}
+nav .nav-group-toggle{display:inline-flex;align-items:center;gap:6px;padding:8px 10px!important;border:1px solid transparent!important;border-radius:7px!important;background:transparent!important;color:#a9bacd!important;font-weight:400!important;font-size:12px;line-height:1.4;cursor:pointer}
+nav .nav-group-toggle:hover{background:#15243a!important;color:#d6e9ef!important;border-color:#22344a!important}
+nav .nav-group-toggle .chev{width:6px;height:6px;border-right:1px solid currentColor;border-bottom:1px solid currentColor;transform:rotate(45deg) translateY(-1px);transition:transform .16s cubic-bezier(.22,1,.36,1)}
+nav .nav-group.is-open .nav-group-toggle{background:#15243a!important;color:#d6e9ef!important;border-color:#22344a!important}
+nav .nav-group.is-open .nav-group-toggle .chev{transform:rotate(-135deg) translateY(-1px)}
+nav .nav-group:has(a[aria-current=page]) .nav-group-toggle{color:#d6e9ef!important}
+nav .nav-group:has(a[aria-current=page]) .nav-group-toggle::before{content:"";width:5px;height:5px;border-radius:50%;background:var(--accent);flex:none}
+nav .nav-group-label{display:none}
+nav .nav-group-menu{display:none;position:absolute;top:calc(100% + 8px);right:0;z-index:40;min-width:220px;padding:6px;background:var(--surface);border:1px solid var(--edge);border-radius:10px;box-shadow:0 12px 32px #00000059;grid-template-columns:1fr;gap:2px}
+nav .nav-group.is-open .nav-group-menu{display:grid}
+nav .nav-group-menu a{padding:8px 10px;border:1px solid transparent;border-radius:7px;font-size:12px;color:#a9bacd!important;text-decoration:none;white-space:nowrap}
+nav .nav-group-menu a:hover,nav .nav-group-menu a[aria-current=page]{background:#15243a;color:#d6e9ef!important;border-color:#22344a}
+@media(max-width:700px){
+nav .nav-toggle{display:inline-flex;align-items:center;gap:8px;margin-left:auto;height:40px;padding:0 14px!important;background:transparent!important;border:1px solid var(--edge)!important;color:var(--ink)!important;font-weight:500!important;font-size:12px}
 nav .nav-toggle:hover{background:#15243a!important;border-color:#31425c!important;color:var(--ink)!important}
 nav .nav-toggle::after{content:"";width:6px;height:6px;border-right:1px solid currentColor;border-bottom:1px solid currentColor;transform:rotate(45deg) translateY(-1px);transition:transform .16s cubic-bezier(.22,1,.36,1)}
 nav.nav-open .nav-toggle::after{transform:rotate(-135deg) translateY(-1px)}
-nav .nav-links{display:none;width:100%;margin:8px 0 0;padding:8px 0 0;border-top:1px solid var(--edge-soft);gap:2px;flex-wrap:wrap!important}
-nav.nav-open .nav-links{display:grid;grid-template-columns:1fr 1fr}
-nav .nav-links>a{padding:10px!important;font-size:12px!important;white-space:nowrap}
-nav .more{display:block;grid-column:1/-1;position:static;margin-top:4px;padding-top:6px;border-top:1px solid var(--edge-soft)}
-nav .more-toggle{display:none}
-nav .more-menu{display:grid!important;grid-template-columns:1fr 1fr;gap:2px;position:static;min-width:0;width:100%;padding:0;background:none!important;border:0!important;box-shadow:none!important}
-nav .more-menu a{padding:10px;font-size:12px}
+nav .nav-links{display:none;width:100%;margin:8px 0 0;padding:8px 0 0;border-top:1px solid var(--edge-soft);gap:0;flex-wrap:wrap!important}
+nav.nav-open .nav-links{display:grid;grid-template-columns:1fr}
+nav .nav-group{display:block;grid-column:1/-1;position:static}
+nav .nav-group+.nav-group{margin-top:8px;padding-top:8px;border-top:1px solid var(--edge-soft)}
+nav .nav-group-toggle{display:none}
+nav .nav-group-label{display:block;margin:0;padding:6px 10px;font-size:12px;letter-spacing:0;color:var(--ink-faint)}
+nav .nav-group:has(a[aria-current=page]) .nav-group-label{color:var(--ink)}
+nav .nav-group:has(a[aria-current=page]) .nav-group-label::before{content:"";display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--accent);margin-right:6px;vertical-align:middle}
+nav .nav-group-menu{display:grid!important;grid-template-columns:1fr 1fr;gap:2px;position:static;min-width:0;width:100%;padding:0;background:none!important;border:0!important;box-shadow:none!important}
+nav .nav-group-menu a{padding:10px;font-size:12px}
 }
 </style>

@@ -104,11 +104,8 @@ td,th{text-align:left;border-bottom:1px solid var(--edge)!important}
 .report-paper td,.report-paper th{border-color:#c9d3ca!important}
 .report-paper small{color:#53695c!important}
 
-@media(max-width:1080px){
-  body>nav{position:relative}
-  nav .nav-links>a{white-space:nowrap}
-}
 @media(max-width:700px){
+  body>nav{position:relative}
   main{padding:32px 5% 88px!important}
   .report-paper{padding:24px!important}
   .metrics{grid-template-columns:1fr 1fr!important}
