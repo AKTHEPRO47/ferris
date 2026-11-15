@@ -1,36 +1,136 @@
 ---
 import Navigation from '../layouts/Navigation.astro';
+import EarthHero from '../components/EarthHero.astro';
+import { navGroups } from '../lib/navigation';
+const sectionCount = navGroups.length;
+const pageCount = navGroups.reduce((total, group) => total + group.links.length, 0);
 ---
-<html lang="en"><head><meta charset="utf-8"/><title>Ferris Mission Control</title><meta name="viewport" content="width=device-width"/></head><body><Navigation/><main><h1>Ferris · Earth investigations</h1><p>NASA POWER climate records · 2001–2025</p><label>Investigation <select id="mission"></select></label><label> Chart <select id="mode"><option value="values">Annual observations</option><option value="anomalies">Monthly seasonal anomalies</option><option value="residuals">Regression residuals</option></select></label><button id="export">Export evidence</button><div id="chart"></div><section id="results"></section><h2>Inspect satellite imagery</h2><p>NASA GIBS MODIS Terra true-color imagery. Clouds and missing coverage may obscure the landscape. These browse images provide geographic context for the climate record.</p><label>First date <input id="first" type="date" value="2020-08-15"/></label><label>Second date <input id="second" type="date" value="2024-08-15"/></label><div class="images"><img id="a" alt="First NASA MODIS scene"/><img id="b" alt="Second NASA MODIS scene"/></div><p id="status"></p><h2>Methods and reproducibility</h2><p>Annual precipitation is calculated from monthly mean daily rates multiplied by calendar days. Annual temperature uses calendar-day weights. Monthly anomalies subtract the 2001–2025 calendar-month means. HAC uses three Bartlett-weighted lags, a finite-sample correction and approximate Student t inference. Trend confidence intervals are conditional on this model.</p><a href="https://power.larc.nasa.gov/docs/services/api/temporal/monthly/">NASA POWER documentation</a> · <a href="/example">Synthetic educational example</a><details><summary>NASA provenance</summary><pre id="provenance"></pre></details></main>
-<script>
-import * as echarts from 'echarts';
-const missions=await fetch('/missions.json').then(r=>r.json());
-const get=(id:string)=>document.getElementById(id)!;
-const val=(id:string)=>(get(id) as HTMLInputElement).value;
-get('mission').innerHTML=missions.map((m:any,i:number)=>'<option value="'+i+'">'+m.location+' · '+m.label+'</option>').join('');
-const chart=echarts.init(get('chart'));let active:any;
-function images(){
- const [lon,lat]=active.coordinates;
- ['first','second'].forEach((date,i)=>{
- const params=new URLSearchParams({SERVICE:'WMS',VERSION:'1.1.1',REQUEST:'GetMap',LAYERS:'MODIS_Terra_CorrectedReflectance_TrueColor',STYLES:'',SRS:'EPSG:4326',BBOX:[lon-1.5,lat-1.5,lon+1.5,lat+1.5].join(','),WIDTH:'700',HEIGHT:'700',FORMAT:'image/jpeg',TIME:val(date)});
- const img=get(i===0?'a':'b') as HTMLImageElement;
- img.onerror=()=>get('status').textContent='An image could not load. Try another date.';
- img.src='https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?'+params;
- });
- get('status').textContent='Window centered on '+lat+' latitude, '+lon+' longitude. Each image covers 3° × 3°. Blank areas may indicate missing coverage.';
-}
-function render(){
- active=missions[Number(val('mission'))];const mode=val('mode');
- const series:any[]=[{name:active.label,type:'line',data:active[mode],showSymbol:false,itemStyle:{color:'#46b896'}}];
- if(mode==='values')series.push({name:'OLS trend',type:'line',data:active.fitted,showSymbol:false,lineStyle:{type:'dashed',color:'#e9b263'}});
- chart.setOption({tooltip:{trigger:'axis'},legend:{bottom:0,textStyle:{color:'#c9dfd9'}},grid:{left:70,right:30,bottom:80},dataZoom:[{type:'inside'},{type:'slider',bottom:30}],xAxis:{type:'category',data:mode==='anomalies'?active.monthly_dates:active.years},yAxis:{type:'value',scale:true,name:mode==='anomalies'?active.monthly_unit:active.unit},series},true);
- const metrics=[['Trend / decade',(active.slope*10).toFixed(3)+' '+active.unit],['HAC p-value',active.hac_p.toPrecision(3)],['95% HAC interval / decade',active.hac_interval.map((v:number)=>(v*10).toFixed(3)).join(' to ')],['Theil–Sen / decade',(active.theil_sen*10).toFixed(3)],['Residual lag-1 correlation',active.lag1.toFixed(3)],['OLS R²',active.r2.toFixed(3)]];
- get('results').innerHTML='<div class="metrics">'+metrics.map(m=>'<div>'+m[0]+'<strong>'+m[1]+'</strong></div>').join('')+'</div><h2>Scientific interpretation</h2><p>The '+(active.slope>0?'positive':'negative')+' estimated trend '+(active.hac_p<.05?'meets':'does not meet')+' the 0.05 threshold under approximate HAC inference. '+active.caveat+'</p><p>Quality audit · 25 complete annual observations. Source metadata and original monthly values are retained. Endpoint sensitivity and spatial multiple-testing checks remain pending.</p><h3>Next investigation</h3><p>Compare '+(active.variable==='T2M'?'rainfall seasonality and land cover':'vegetation indices and rainfall anomalies')+' over the same region and dates. This rule-based suggestion requires additional evidence before attributing a cause.</p>';
- get('provenance').textContent=JSON.stringify(active.header,null,2);images();
-}
-get('mission').onchange=render;get('mode').onchange=render;get('first').onchange=images;get('second').onchange=images;
-get('export').onclick=()=>{const u=URL.createObjectURL(new Blob([JSON.stringify(active,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=u;a.download='ferris-nasa-investigation.json';a.click();setTimeout(()=>URL.revokeObjectURL(u),1000)};
-new ResizeObserver(()=>chart.resize()).observe(get('chart'));render();
-</script><style is:global>
-body{background:#102b29;color:#d8e8df;font:16px/1.6 system-ui;margin:0}main{max-width:1200px;margin:auto;padding:45px 5%}h1{font-size:45px}h2{margin-top:35px}label{display:inline-block;margin:12px}select,input,button{padding:12px;background:#24443d;color:white;border:1px solid #537567;border-radius:8px;font:inherit}button{cursor:pointer}#chart{height:430px;margin:20px 0}.metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}.metrics>div{padding:20px;background:#1a3934;border-radius:12px;font-size:13px}strong{display:block;font-size:23px}.images{display:grid;grid-template-columns:1fr 1fr;gap:20px}img{width:100%;aspect-ratio:1;background:#081c19;border-radius:14px}a{color:#78d1b1}pre{white-space:pre-wrap}@media(max-width:700px){.metrics,.images{grid-template-columns:1fr}h1{font-size:32px}}
-</style></body></html>
+<html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width"/><title>Ferris · Earth intelligence</title><meta name="description" content="Ferris is a workspace for reading regional climate records against NASA data, with the uncertainty, method, and provenance kept in view."/><link rel="icon" href="/favicon.svg" type="image/svg+xml"/><link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32"/><link rel="apple-touch-icon" href="/apple-touch-icon.png"/><meta name="theme-color" content="#0c1420"/></head>
+<body>
+<Navigation background={false}/>
+<main class="home">
+  <section class="hero" aria-labelledby="hero-title">
+    <div class="hero-inner">
+      <header class="hero-copy">
+        <h1 id="hero-title">Ferris</h1>
+        <p class="hero-subtitle">Earth intelligence</p>
+        <p class="hero-lede">A workspace for reading regional climate records against NASA data. Every estimate keeps its uncertainty, method, and provenance in view.</p>
+        <div class="hero-actions">
+          <a class="hero-primary" href="/mission-control">Open Mission control</a>
+          <a class="hero-secondary" href="#navigate">How the workspace is arranged <span aria-hidden="true">↓</span></a>
+        </div>
+        <p class="hero-meta mono">NASA POWER · 2001–2025 · 6 regional investigations</p>
+      </header>
+      <EarthHero/>
+    </div>
+  </section>
+
+  <section class="navigate" id="navigate" aria-labelledby="navigate-title">
+    <div class="navigate-inner">
+      <div class="navigate-head">
+        <div>
+          <h2 id="navigate-title">How the workspace is arranged</h2>
+          <p class="navigate-lede">Ferris is arranged in three layers. Start with an investigation, move into Earth systems when you need spatial or scenario context, and use the reference layer when you need the method, source, or a definition. Each card opens to its pages.</p>
+        </div>
+        <p class="navigate-meta mono">{sectionCount} sections · {pageCount} pages</p>
+      </div>
+      <div class="topic-grid">
+        {navGroups.map((group, index) => (
+          <details class="topic">
+            <summary>
+              <span class="topic-head"><span class="topic-index mono">{String(index + 1).padStart(2, '0')}</span><span class="topic-name">{group.label}</span></span>
+              <span class="topic-chev" aria-hidden="true"></span>
+              <span class="topic-desc">{group.description}</span>
+              <span class="topic-meta mono">{group.links.length} pages</span>
+            </summary>
+            <ul class="topic-links">
+              {group.links.map(([href, label]) => <li><a href={href}>{label}</a></li>)}
+            </ul>
+          </details>
+        ))}
+      </div>
+      <footer class="home-footer">
+        <p>Every chart, test, and scenario is regenerated from the repository, with its uncertainty and source attached.</p>
+        <a href="/methods">Read the methods</a>
+      </footer>
+    </div>
+  </section>
+</main>
+<style>
+  .home{max-width:none!important;margin:0!important;padding:0!important;min-height:0!important;background:none!important}
+  .home *{box-sizing:border-box}
+  .home .mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+
+  .hero{min-height:calc(100vh - 73px);min-height:calc(100svh - 73px);display:flex;align-items:center;padding:64px 5% 72px;overflow:hidden}
+  .hero-inner{width:100%;max-width:1320px;margin:0 auto;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.06fr);gap:48px;align-items:center}
+  .hero-copy{max-width:620px;margin:0;padding:0;border:0}
+  .hero h1{font-size:clamp(64px,9vw,118px)!important;font-weight:500!important;line-height:.92!important;letter-spacing:-.03em!important;margin:0;color:var(--ink)}
+  .hero-subtitle{font-size:18px;letter-spacing:.01em;color:var(--ink-muted);margin:10px 0 0}
+  .hero-lede{font-size:18px;line-height:1.6;color:var(--ink-muted);max-width:54ch;margin:24px 0 0}
+  .hero-actions{display:flex;align-items:center;gap:18px 24px;flex-wrap:wrap;margin-top:30px}
+  .hero-primary{display:inline-flex;align-items:center;justify-content:center;height:46px;padding:0 20px;border-radius:8px;background:var(--accent)!important;color:var(--accent-ink)!important;font-weight:600;font-size:14px;text-decoration:none!important;transition:background-color .16s cubic-bezier(.22,1,.36,1)}
+  .hero-primary:hover{background:#b3d8de!important}
+  .hero-secondary{display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--ink-muted)!important;text-decoration:none!important;border-bottom:1px solid var(--edge);padding-bottom:2px;transition:color .16s cubic-bezier(.22,1,.36,1),border-color .16s cubic-bezier(.22,1,.36,1)}
+  .hero-secondary:hover{color:var(--ink)!important;border-color:var(--ink-faint)}
+  .hero-secondary span{font-size:14px;line-height:1}
+  .hero-meta{font-size:11px;letter-spacing:.02em;color:var(--ink-faint);margin:26px 0 0}
+
+  .navigate{border-top:1px solid var(--edge-soft);padding:80px 5% 96px;scroll-margin-top:96px}
+  .navigate-inner{max-width:1320px;margin:0 auto}
+  .navigate-head{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px 32px;align-items:end;margin-bottom:36px}
+  .navigate-head h2{font-size:clamp(30px,3.2vw,40px)!important;font-weight:500!important;letter-spacing:-.02em!important;margin:0 0 12px;color:var(--ink)!important}
+  .navigate-lede{font-size:17px;line-height:1.65;color:var(--ink-muted);max-width:72ch;margin:0}
+  .navigate-meta{font-size:11px;color:var(--ink-faint);margin:0;white-space:nowrap;text-align:right}
+
+  .topic-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;align-items:start}
+  .topic{background:var(--surface);border:1px solid var(--edge);border-radius:14px;overflow:hidden;padding:0}
+  .topic summary{list-style:none;margin:0;display:grid;grid-template-columns:1fr auto;gap:10px 16px;padding:22px 24px;cursor:pointer;position:relative}
+  .topic summary::-webkit-details-marker{display:none}
+  .topic summary::marker{content:"";display:none}
+  .topic-head{display:flex;align-items:baseline;gap:10px;min-width:0}
+  .topic-index{font-size:11px;color:var(--ink-faint)}
+  .topic-name{font-size:18px;font-weight:500;letter-spacing:-.01em;color:var(--ink)}
+  .topic-chev{grid-column:2;grid-row:1;align-self:center;width:7px;height:7px;border-right:1px solid var(--ink-faint);border-bottom:1px solid var(--ink-faint);transform:rotate(45deg) translateY(-2px);transition:transform .16s cubic-bezier(.22,1,.36,1)}
+  .topic[open] .topic-chev{transform:rotate(-135deg) translateY(-2px)}
+  .topic-desc{grid-column:1/-1;font-size:14px;line-height:1.6;color:var(--ink-muted);margin:0;max-width:48ch}
+  .topic-meta{grid-column:1/-1;font-size:11px;color:var(--ink-faint);margin:0}
+  .topic summary:hover{background:#141f30}
+  .topic[open] summary{border-bottom:1px solid var(--edge-soft)}
+  .topic-links{list-style:none;margin:0;padding:0 0 8px}
+  .topic-links li+li{border-top:1px solid var(--edge-soft)}
+  .topic-links a{display:flex;align-items:center;padding:10px 24px;font-size:13px;color:var(--ink-muted)!important;text-decoration:none;transition:background-color .16s cubic-bezier(.22,1,.36,1),color .16s cubic-bezier(.22,1,.36,1)}
+  .topic-links a:hover{background:#15243a;color:var(--ink)!important}
+
+  .home-footer{display:flex;align-items:baseline;justify-content:space-between;gap:16px 32px;flex-wrap:wrap;border-top:1px solid var(--edge-soft);margin-top:48px;padding-top:24px}
+  .home-footer p{font-size:14px;line-height:1.6;color:var(--ink-muted);max-width:72ch;margin:0}
+  .home-footer a{font-size:13px;color:var(--accent)!important;text-decoration:none;white-space:nowrap}
+  .home-footer a:hover{text-decoration:underline}
+
+  @media(max-width:1000px){
+    .hero-inner{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:32px}
+    .hero h1{font-size:clamp(56px,9vw,96px)!important}
+    .topic-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+    .navigate-head{grid-template-columns:1fr}
+    .navigate-meta{text-align:left}
+  }
+  @media(max-width:900px){
+    .hero{min-height:auto;padding:48px 5% 56px}
+    .hero-inner{grid-template-columns:1fr;gap:28px}
+    .hero-copy{max-width:none}
+    .hero h1{font-size:clamp(56px,16vw,88px)!important}
+    .hero-lede{font-size:17px;max-width:60ch}
+    .navigate{padding:56px 5% 72px;scroll-margin-top:84px}
+  }
+  @media(max-width:700px){
+    .topic-grid{grid-template-columns:1fr}
+  }
+  @media(max-width:600px){
+    .hero-actions{flex-direction:column;align-items:flex-start;gap:14px}
+    .hero-primary{width:100%}
+    .hero-meta{font-size:10px}
+    .topic summary{padding:18px 20px}
+    .topic-links a{padding:10px 20px}
+    .home-footer{margin-top:32px}
+  }
+</style>
+</body></html>

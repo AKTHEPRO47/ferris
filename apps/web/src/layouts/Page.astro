@@ -2,7 +2,7 @@
 import Navigation from './Navigation.astro';
 const {title,description}=Astro.props;
 ---
-<html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width"/><title>{title} | Ferris</title></head><body><Navigation/><main><header><h1>{title}</h1><p>{description}</p></header><slot/></main></body></html>
+<html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width"/><title>{title} | Ferris</title><link rel="icon" href="/favicon.svg" type="image/svg+xml"/><link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32"/><link rel="apple-touch-icon" href="/apple-touch-icon.png"/><meta name="theme-color" content="#0c1420"/></head><body><Navigation/><main><header><h1>{title}</h1><p>{description}</p></header><slot/></main></body></html>
 <style is:global>
 body{margin:0;background:#102b29;color:#d8e8df;font:16px/1.65 system-ui}main{max-width:1250px;margin:auto;padding:35px 5%}h1{font-size:42px;margin:10px 0}h2{font-size:24px}a{color:#85dcb6}label{display:inline-flex;flex-direction:column;gap:5px;margin:10px 15px 10px 0;font-size:13px}select,input,button{padding:11px;background:#24463e;color:#fff;border:1px solid #58786a;border-radius:7px;font:inherit}button{cursor:pointer}article,.card{background:#1b3933;border:1px solid #3b584e;border-radius:12px;padding:22px;margin:16px 0}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:20px}table{border-collapse:collapse;width:100%}td,th{padding:12px;text-align:left;border-bottom:1px solid #486456}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px}.chart{height:420px}small{color:#afc6b9}button:hover{background:#38664f}@media(max-width:650px){h1{font-size:32px}table{font-size:12px}td,th{padding:6px}}
 </style>

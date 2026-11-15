@@ -1,0 +1,115 @@
+<figure class="earth-hero">
+  <div class="earth-stage" id="hero-earth" role="img" aria-label="A slowly rotating Earth using NASA Blue Marble imagery">
+    <div class="earth-static" aria-hidden="true"></div>
+  </div>
+  <figcaption class="earth-credit">Surface · NASA GIBS Blue Marble</figcaption>
+</figure>
+<script>
+  import * as THREE from 'three';
+  const host = document.getElementById('hero-earth') as HTMLElement | null;
+  if (host) {
+    const reduced = matchMedia('(prefers-reduced-motion: reduce)');
+    try {
+      const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
+      renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+      renderer.setClearColor(0x000000, 0);
+      renderer.domElement.style.display = 'block';
+      host.appendChild(renderer.domElement);
+
+      const scene = new THREE.Scene();
+      const camera = new THREE.PerspectiveCamera(38, 1, .1, 100);
+      camera.position.z = 3.4;
+
+      let draw = () => {};
+      const texture = new THREE.TextureLoader().load('/images/earth.jpg',
+        () => { host.classList.add('is-ready'); draw(); },
+        undefined,
+        () => host.classList.add('is-fallback')
+      );
+      texture.colorSpace = THREE.SRGBColorSpace;
+
+      const tilt = new THREE.Group();
+      tilt.rotation.z = -.32;
+      const globe = new THREE.Mesh(
+        new THREE.SphereGeometry(1, 96, 64),
+        new THREE.MeshPhongMaterial({ map: texture, shininess: 4 })
+      );
+      globe.rotation.y = 2.8;
+      tilt.add(globe);
+      scene.add(tilt);
+
+      scene.add(new THREE.AmbientLight(0xffffff, .85));
+      const sun = new THREE.DirectionalLight(0xfff1d6, 1.5);
+      sun.position.set(-2.5, 1.8, 2.6);
+      scene.add(sun);
+
+      const atmosphere = new THREE.Mesh(
+        new THREE.SphereGeometry(1.015, 64, 48),
+        new THREE.MeshBasicMaterial({ color: 0x74c8e6, transparent: true, opacity: .07, side: THREE.BackSide })
+      );
+      scene.add(atmosphere);
+
+      draw = () => renderer.render(scene, camera);
+      const resize = () => {
+        const width = host.clientWidth, height = host.clientHeight;
+        if (!width || !height) return;
+        renderer.setSize(width, height);
+        camera.aspect = width / height;
+        camera.updateProjectionMatrix();
+        draw();
+      };
+      new ResizeObserver(resize).observe(host);
+
+      let frame = 0, last = 0, visible = true;
+      const tick = (now: number) => {
+        if (!visible || document.hidden || reduced.matches) { frame = 0; return; }
+        frame = requestAnimationFrame(tick);
+        if (now - last < 40) return;
+        const delta = Math.min((now - last) / 1000, .1);
+        last = now;
+        globe.rotation.y += delta * .028;
+        draw();
+      };
+      const start = () => { if (frame) return; last = performance.now(); frame = requestAnimationFrame(tick); };
+      const stop = () => { cancelAnimationFrame(frame); frame = 0; };
+
+      new IntersectionObserver(([entry]) => {
+        visible = entry.isIntersecting;
+        if (visible) start(); else stop();
+      }, { threshold: .05 }).observe(host);
+      document.addEventListener('visibilitychange', () => { if (document.hidden) stop(); else if (visible) start(); });
+      reduced.addEventListener('change', () => { if (reduced.matches) { stop(); draw(); } else start(); });
+
+      resize();
+      if (reduced.matches) draw(); else start();
+    } catch {
+      host.classList.add('is-fallback');
+    }
+  }
+</script>
+<style>
+  .earth-hero{width:100%;max-width:720px;margin:0;justify-self:end}
+  .earth-stage{
+    position:relative;width:100%;aspect-ratio:1;
+    opacity:0;transition:opacity .45s cubic-bezier(.22,1,.36,1);
+  }
+  .earth-stage.is-ready,.earth-stage.is-fallback{opacity:1}
+  .earth-static{
+    display:none;position:absolute;inset:7%;border-radius:50%;
+    background:url('/images/earth.jpg') center/cover no-repeat;
+    filter:saturate(.9) brightness(.8);
+    box-shadow:inset -24px -12px 60px #000a;
+    border:1px solid #2a3f56;
+  }
+  .earth-stage.is-fallback canvas{display:none}
+  .earth-stage.is-fallback .earth-static{display:block}
+  .earth-credit{
+    margin:10px 0 0;text-align:right;
+    font-family:var(--mono);font-size:10px;letter-spacing:.02em;
+    color:var(--ink-faint);
+  }
+  @media(max-width:900px){
+    .earth-hero{justify-self:center;max-width:520px;width:min(88vw,520px)}
+    .earth-credit{text-align:center}
+  }
+</style>
